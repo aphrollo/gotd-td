@@ -82,7 +82,8 @@ func CreateConn(
 		opts.DC += 10000
 	}
 	opts.Handler = conn
-	opts.Logger = conn.log.Named("mtproto")
+	clg := conn.log.With().Str("logger", "mtproto").Logger()
+	opts.Logger = &clg
 	conn.proto = mtproto.New(create, opts)
 
 	return conn
