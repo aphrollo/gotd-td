@@ -1,13 +1,14 @@
 package mtproto
 
 import (
+	"bytes"
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/gotd/neo"
 
@@ -20,14 +21,16 @@ import (
 func TestConn_handleSessionCreated(t *testing.T) {
 	t.Run("NeedSynchronization", func(t *testing.T) {
 		a := require.New(t)
-		logger, logs := observer.New(zapcore.WarnLevel)
+
+		logs := &bytes.Buffer{}
+		logger := zerolog.New(logs).Level(zerolog.WarnLevel).With().Timestamp().Logger()
 
 		now := time.Unix(100, 0)
 		clock := neo.NewTime(now)
 		gotSession := tdsync.NewReady()
 		conn := Conn{
 			clock:      clock,
-			log:        zap.New(logger),
+			log:        &logger,
 			gotSession: gotSession,
 			handler:    newTestHandler(),
 		}
@@ -48,10 +51,15 @@ func TestConn_handleSessionCreated(t *testing.T) {
 		}
 		a.Equal(int64(10), conn.salt)
 
-		msgs := logs.All()
-		a.Len(msgs, 1)
-		a.Equal("Local clock needs synchronization", msgs[0].Message)
+		// Parse logged lines
+		lines := strings.Split(strings.TrimSpace(logs.String()), "\n")
+		a.Len(lines, 1)
+
+		var entry map[string]interface{}
+		a.NoError(json.Unmarshal([]byte(lines[0]), &entry))
+		a.Equal("Local clock needs synchronization", entry["message"])
 	})
+
 	t.Run("Invalid", func(t *testing.T) {
 		conn := Conn{}
 		buf := bin.Buffer{}

@@ -3,10 +3,9 @@ package e2etest
 import (
 	"io"
 
-	"go.uber.org/zap"
-
 	"github.com/gotd/td/constant"
 	"github.com/gotd/td/crypto"
+	"github.com/rs/zerolog"
 )
 
 // TestOptions contains some common test server settings.
@@ -15,7 +14,7 @@ type TestOptions struct {
 	AppHash string
 	DC      int
 	Random  io.Reader
-	Logger  *zap.Logger
+	Logger  *zerolog.Logger
 }
 
 func (opt *TestOptions) setDefaults() {
@@ -32,6 +31,7 @@ func (opt *TestOptions) setDefaults() {
 		opt.Random = crypto.DefaultRand()
 	}
 	if opt.Logger == nil {
-		opt.Logger = zap.NewNop()
+		nop := zerolog.Nop()
+		opt.Logger = &nop
 	}
 }

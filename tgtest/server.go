@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/go-faster/errors"
-	"go.uber.org/zap"
+	"github.com/rs/zerolog"
 	"nhooyr.io/websocket"
 
 	"github.com/gotd/td/clock"
@@ -46,8 +46,8 @@ type Server struct {
 	users *users
 
 	// type map for logging.
-	types *tmap.Map   // immutable
-	log   *zap.Logger // immutable
+	types *tmap.Map       // immutable
+	log   *zerolog.Logger // immutable
 }
 
 // NewPrivateKey creates new private key from RSA private key.
@@ -89,9 +89,9 @@ func (s *Server) Serve(ctx context.Context, l transport.Listener) error {
 }
 
 func (s *Server) serve(ctx context.Context, l transport.Listener) error {
-	s.log.Info("Serving")
+	s.log.Info().Msg("Serving")
 	defer func() {
-		s.log.Info("Stopping")
+		s.log.Info().Msg("Stopping")
 	}()
 
 	grp := tdsync.NewCancellableGroup(ctx)
@@ -121,7 +121,7 @@ func (s *Server) serve(ctx context.Context, l transport.Listener) error {
 						return nil
 					}
 
-					s.log.Info("Serving handler error", zap.Error(err))
+					s.log.Info().Err(err).Msg("Serving handler error")
 				}
 				return nil
 			})

@@ -8,9 +8,6 @@ import (
 	"time"
 
 	"github.com/go-faster/errors"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zaptest"
-
 	"github.com/gotd/td/bin"
 	"github.com/gotd/td/clock"
 	"github.com/gotd/td/mtproto"
@@ -20,6 +17,8 @@ import (
 	"github.com/gotd/td/telegram/internal/manager"
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/tgerr"
+	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/require"
 )
 
 type migrationTestHandler func(id int64, dc int, body bin.Encoder) (bin.Encoder, error)
@@ -99,9 +98,10 @@ func newMigrationClient(t *testing.T, h migrationTestHandler) *Client {
 			client:   client,
 		}
 	}
+	logger := zerolog.New(zerolog.NewTestWriter(t))
 
 	client = &Client{
-		log:     zaptest.NewLogger(t),
+		log:     &logger,
 		rand:    rand.New(rand.NewSource(1)),
 		appID:   TestAppID,
 		appHash: TestAppHash,

@@ -10,7 +10,7 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/go-faster/errors"
-	"go.uber.org/zap"
+	"github.com/rs/zerolog"
 	"golang.org/x/net/proxy"
 
 	"github.com/gotd/td/clock"
@@ -100,7 +100,7 @@ func ClientFromEnvironment(opts Options) (*Client, error) {
 	return NewClient(appID, appHash, opts), nil
 }
 
-func retry(ctx context.Context, logger *zap.Logger, cb func(ctx context.Context) error) error {
+func retry(ctx context.Context, logger *zerolog.Logger, cb func(ctx context.Context) error) error {
 	b := backoff.WithContext(backoff.NewExponentialBackOff(), ctx)
 
 	// List of known retryable RPC error types.
@@ -112,7 +112,7 @@ func retry(ctx context.Context, logger *zap.Logger, cb func(ctx context.Context)
 
 	return backoff.Retry(func() error {
 		if err := cb(ctx); err != nil {
-			logger.Warn("TestClient run failed", zap.Error(err))
+			logger.Warn().Err(err).Msg("TestClient run failed")
 
 			if tgerr.Is(err, retryableErrors...) {
 				return err
@@ -150,9 +150,13 @@ func TestClient(ctx context.Context, opts Options, cb func(ctx context.Context, 
 		opts.DCList = dcs.Test()
 	}
 
-	logger := zap.NewNop()
+	var logger *zerolog.Logger
+	nop := zerolog.Nop()
+	logger = &nop
+
 	if opts.Logger != nil {
-		logger = opts.Logger.Named("test")
+		l := opts.Logger.With().Str("logger", "test").Logger()
+		logger = &l
 	}
 
 	// Sometimes testing server can return "AUTH_KEY_UNREGISTERED" error.

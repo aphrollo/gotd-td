@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"go.uber.org/zap/zaptest"
+	"github.com/rs/zerolog"
 
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/tgerr"
@@ -13,8 +13,9 @@ import (
 
 func testManager(t *testing.T) (*tgmock.Mock, *Manager) {
 	mock := tgmock.New(t)
+	logger := zerolog.New(zerolog.NewTestWriter(t))
 	return mock, Options{
-		Logger: zaptest.NewLogger(t),
+		Logger: &logger,
 		Cache:  &InmemoryCache{},
 	}.Build(tg.NewClient(mock))
 }

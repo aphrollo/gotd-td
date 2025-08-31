@@ -5,11 +5,10 @@ import (
 	"time"
 
 	"github.com/go-faster/errors"
-	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/zap"
-
 	"github.com/gotd/td/telegram"
 	"github.com/gotd/td/tg"
+	"github.com/rs/zerolog"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type channelUpdate struct {
@@ -36,7 +35,7 @@ type channelState struct {
 	diffLim    int
 	client     API
 	storage    StateStorage
-	log        *zap.Logger
+	log        *zerolog.Logger
 	tracer     trace.Tracer
 	handler    telegram.UpdateHandler
 	onTooLong  func(channelID int64)
@@ -53,7 +52,7 @@ type channelStateConfig struct {
 	Storage          StateStorage
 	Handler          telegram.UpdateHandler
 	OnChannelTooLong func(channelID int64)
-	Logger           *zap.Logger
+	Logger           *zerolog.Logger
 	Tracer           trace.Tracer
 }
 
@@ -75,11 +74,11 @@ func newChannelState(cfg channelStateConfig) *channelState {
 		onTooLong:  cfg.OnChannelTooLong,
 		tracer:     cfg.Tracer,
 	}
-
+	lg := cfg.Logger.With().Str("logger", "pts").Logger()
 	state.pts = newSequenceBox(sequenceConfig{
 		InitialState: cfg.InitialPts,
 		Apply:        state.applyPts,
-		Logger:       cfg.Logger.Named("pts"),
+		Logger:       &lg,
 		Tracer:       cfg.Tracer,
 	})
 
@@ -98,7 +97,7 @@ func (s *channelState) Push(ctx context.Context, u channelUpdate) error {
 func (s *channelState) Run(ctx context.Context) error {
 	// Subscribe to channel updates.
 	if err := s.getDifference(ctx); err != nil {
-		s.log.Error("Failed to subscribe to channel updates", zap.Error(err))
+		s.log.Error().Err(err).Msg("Failed to subscribe to channel updates")
 	}
 
 	for {
@@ -106,10 +105,10 @@ func (s *channelState) Run(ctx context.Context) error {
 		case u := <-s.updates:
 			ctx := trace.ContextWithSpanContext(ctx, u.span)
 			if err := s.handleUpdate(ctx, u.update, u.entities); err != nil {
-				s.log.Error("Handle update error", zap.Error(err))
+				s.log.Error().Err(err).Msg("Handle update error")
 			}
 		case <-s.pts.gapTimeout.C:
-			s.log.Debug("Gap timeout")
+			s.log.Debug().Msg("Gap timeout")
 			s.getDifferenceLogger(ctx)
 		case <-ctx.Done():
 			if len(s.pts.pending) > 0 {
@@ -118,7 +117,7 @@ func (s *channelState) Run(ctx context.Context) error {
 			}
 			return ctx.Err()
 		case <-s.idleTimeout.C:
-			s.log.Debug("Idle timeout")
+			s.log.Debug().Msg("Idle timeout")
 			s.resetIdleTimer()
 			s.getDifferenceLogger(ctx)
 		}
@@ -162,7 +161,7 @@ func (s *channelState) handleTooLong(ctx context.Context, long *tg.UpdateChannel
 
 	remotePts, ok := long.GetPts()
 	if !ok {
-		s.log.Warn("Got UpdateChannelTooLong without pts field")
+		s.log.Warn().Msg("Got UpdateChannelTooLong without pts field")
 		return s.getDifference(ctx)
 	}
 
@@ -195,12 +194,12 @@ func (s *channelState) applyPts(ctx context.Context, state int, updates []update
 		Users:   ents.Users,
 		Chats:   ents.Chats,
 	}); err != nil {
-		s.log.Error("Handle update error", zap.Error(err))
+		s.log.Error().Err(err).Msg("Handle update error")
 		return nil
 	}
 
 	if err := s.storage.SetChannelPts(ctx, s.selfID, s.channelID, state); err != nil {
-		s.log.Error("SetChannelPts error", zap.Error(err))
+		s.log.Error().Err(err).Msg("SetChannelPts error")
 	}
 
 	return nil
@@ -211,11 +210,11 @@ func (s *channelState) getDifference(ctx context.Context) error {
 	defer span.End()
 	s.pts.gaps.Clear()
 
-	s.log.Debug("Getting difference")
+	s.log.Debug().Msg("Getting difference")
 
 	if now := time.Now(); now.Before(s.diffTimeout) {
 		dur := s.diffTimeout.Sub(now)
-		s.log.Debug("GetChannelDifference timeout", zap.Duration("duration", dur))
+		s.log.Debug().Dur("duration", dur).Msg("GetChannelDifference timeout")
 		if err := func() error {
 			afterC := time.After(dur)
 			for {
@@ -230,7 +229,7 @@ func (s *channelState) getDifference(ctx context.Context) error {
 					// Ignoring updates to prevent *internalState worker from blocking.
 					// All ignored updates should be restored by future getChannelDifference call.
 					// At least I hope so...
-					s.log.Debug("Ignoring update due to getChannelDifference timeout", zap.Any("update", u.update))
+					s.log.Debug().Any("update", u.update).Msg("Ignoring update due to getChannelDifference timeout")
 				case <-ctx.Done():
 					return ctx.Err()
 				}
@@ -276,12 +275,12 @@ func (s *channelState) getDifference(ctx context.Context) error {
 				Users:   diff.Users,
 				Chats:   diff.Chats,
 			}); err != nil {
-				s.log.Error("Handle updates error", zap.Error(err))
+				s.log.Error().Err(err).Msg("Handle updates error")
 			}
 		}
 
 		if err := s.storage.SetChannelPts(ctx, s.selfID, s.channelID, diff.Pts); err != nil {
-			s.log.Warn("SetChannelPts error", zap.Error(err))
+			s.log.Warn().Err(err).Msg("SetChannelPts error")
 		}
 
 		s.pts.SetState(diff.Pts, "updates.channelDifference")
@@ -297,7 +296,7 @@ func (s *channelState) getDifference(ctx context.Context) error {
 
 	case *tg.UpdatesChannelDifferenceEmpty:
 		if err := s.storage.SetChannelPts(ctx, s.selfID, s.channelID, diff.Pts); err != nil {
-			s.log.Warn("SetChannelPts error", zap.Error(err))
+			s.log.Warn().Err(err).Msg("SetChannelPts error")
 		}
 
 		s.pts.SetState(diff.Pts, "updates.channelDifferenceEmpty")
@@ -314,10 +313,10 @@ func (s *channelState) getDifference(ctx context.Context) error {
 
 		remotePts, err := getDialogPts(diff.Dialog)
 		if err != nil {
-			s.log.Warn("UpdatesChannelDifferenceTooLong invalid Dialog", zap.Error(err))
+			s.log.Warn().Err(err).Msg("UpdatesChannelDifferenceTooLong invalid Dialog")
 		} else {
 			if err := s.storage.SetChannelPts(ctx, s.selfID, s.channelID, remotePts); err != nil {
-				s.log.Warn("SetChannelPts error", zap.Error(err))
+				s.log.Warn().Err(err).Msg("SetChannelPts error")
 			}
 
 			s.pts.SetState(remotePts, "updates.channelDifferenceTooLong dialog new pts")
@@ -333,7 +332,7 @@ func (s *channelState) getDifference(ctx context.Context) error {
 
 func (s *channelState) getDifferenceLogger(ctx context.Context) {
 	if err := s.getDifference(ctx); err != nil {
-		s.log.Error("get channel difference error", zap.Error(err))
+		s.log.Error().Err(err).Msg("get channel difference error")
 	}
 }
 

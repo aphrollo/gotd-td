@@ -6,27 +6,27 @@ import (
 	"sync"
 
 	"github.com/go-faster/errors"
-	"go.uber.org/zap"
-
 	"github.com/gotd/td/telegram"
 	"github.com/gotd/td/telegram/message"
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/tgerr"
+	"github.com/rs/zerolog"
 )
 
 // EchoBot is a simple echo message bot.
 type EchoBot struct {
 	suite *Suite
 
-	logger *zap.Logger
+	logger *zerolog.Logger
 	auth   chan<- *tg.User
 }
 
 // NewEchoBot creates new echo bot.
 func NewEchoBot(suite *Suite, auth chan<- *tg.User) EchoBot {
+	lg := suite.logger.With().Str("logger", "echobot").Logger()
 	return EchoBot{
 		suite:  suite,
-		logger: suite.logger.Named("echobot"),
+		logger: &lg,
 		auth:   auth,
 	}
 }
@@ -106,8 +106,12 @@ func (b EchoBot) handler(client *telegram.Client) tg.NewMessageHandler {
 		}
 
 		if m, ok := update.Message.(interface{ GetMessage() string }); ok {
-			b.logger.Named("dispatcher").
-				Info("Got new message update", zap.String("message", m.GetMessage()))
+			lg := b.logger.With().
+				Str("logger", "dispatcher").
+				Str("message", m.GetMessage()).
+				Logger()
+			lg.Info().
+				Msg("Got new message update")
 		}
 
 		if dialogsUsers.empty() {
@@ -138,12 +142,12 @@ func (b EchoBot) handler(client *telegram.Client) tg.NewMessageHandler {
 					user = dialogsUsers.get(peer.UserID)
 				}
 
-				b.logger.Info("Got message",
-					zap.String("text", m.Message),
-					zap.Int64("user_id", user.ID),
-					zap.String("user_first_name", user.FirstName),
-					zap.String("username", user.Username),
-				)
+				b.logger.Info().
+					Str("text", m.Message).
+					Int64("user_id", user.ID).
+					Str("user_first_name", user.FirstName).
+					Str("username", user.Username).
+					Msg("Got message")
 
 				if err := retry(ctx, func() error {
 					_, err := sender.To(user.AsInputPeer()).Text(ctx, m.Message)
@@ -173,10 +177,10 @@ func (b EchoBot) Run(ctx context.Context) error {
 			return errors.Wrap(err, "login")
 		}
 
-		b.logger.Info("Logged in",
-			zap.String("user", me.Username),
-			zap.Int64("id", me.ID),
-		)
+		b.logger.Info().
+			Str("user", me.Username).
+			Int64("id", me.ID).
+			Msg("Logged in")
 
 		select {
 		case b.auth <- me:

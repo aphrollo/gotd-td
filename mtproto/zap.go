@@ -3,10 +3,8 @@ package mtproto
 import (
 	"fmt"
 
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-
 	"github.com/gotd/td/bin"
+	"github.com/rs/zerolog"
 )
 
 type logType struct {
@@ -14,32 +12,35 @@ type logType struct {
 	Name string
 }
 
-func (l logType) MarshalLogObject(e zapcore.ObjectEncoder) error {
+func (l logType) MarshalZerologObject(e *zerolog.Event) {
 	typeIDStr := fmt.Sprintf("0x%x", l.ID)
-	e.AddString("type_id", typeIDStr)
+	e.Str("type_id", typeIDStr)
 	if l.Name != "" {
-		e.AddString("type_name", l.Name)
+		e.Str("type_name", l.Name)
 	}
-	return nil
 }
 
-func (c *Conn) logWithBuffer(b *bin.Buffer) *zap.Logger {
-	return c.logWithType(b).With(zap.Int("size_bytes", b.Len()))
+func (c *Conn) logWithBuffer(b *bin.Buffer) *zerolog.Logger {
+	l := c.logWithType(b).With().
+		Int("size_bytes", b.Len()).
+		Logger()
+
+	return &l
 }
 
-func (c *Conn) logWithType(b *bin.Buffer) *zap.Logger {
+func (c *Conn) logWithType(b *bin.Buffer) *zerolog.Logger {
 	id, err := b.PeekID()
 	if err != nil {
-		// Type info not available.
 		return c.log
 	}
-
 	return c.logWithTypeID(id)
 }
 
-func (c *Conn) logWithTypeID(id uint32) *zap.Logger {
-	return c.log.With(zap.Inline(logType{
+func (c *Conn) logWithTypeID(id uint32) *zerolog.Logger {
+	lt := logType{
 		ID:   id,
 		Name: c.types.Get(id),
-	}))
+	}
+	lg := c.log.With().Interface("type", lt).Logger()
+	return &lg
 }

@@ -13,13 +13,12 @@ import (
 	"time"
 
 	"github.com/go-faster/errors"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zaptest"
-
 	"github.com/gotd/td/session"
 	"github.com/gotd/td/tdsync"
 	"github.com/gotd/td/telegram"
 	"github.com/gotd/td/telegram/dcs"
+	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/require"
 )
 
 type mtg struct {
@@ -65,7 +64,7 @@ func (m mtg) generateSecret(ctx context.Context, _ string) ([]byte, error) {
 func testMTProxy(secretType string, m mtg, storage session.Storage) func(t *testing.T) {
 	return func(t *testing.T) {
 		a := require.New(t)
-		logger := zaptest.NewLogger(t)
+		logger := zerolog.New(zerolog.NewTestWriter(t))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
@@ -107,7 +106,7 @@ func testMTProxy(secretType string, m mtg, storage session.Storage) func(t *test
 
 			return tryConnect(ctx, telegram.Options{
 				Resolver:       resolver,
-				Logger:         logger,
+				Logger:         &logger,
 				SessionStorage: storage,
 				DCList:         dcs.Prod(),
 			})

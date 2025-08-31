@@ -7,11 +7,6 @@ import (
 	"time"
 
 	"github.com/go-faster/errors"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"go.uber.org/zap/zaptest"
-
 	"github.com/gotd/td/session"
 	"github.com/gotd/td/tdsync"
 	"github.com/gotd/td/telegram"
@@ -20,6 +15,8 @@ import (
 	"github.com/gotd/td/testutil"
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/transport"
+	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/require"
 )
 
 func tryConnect(ctx context.Context, opts telegram.Options) error {
@@ -35,14 +32,14 @@ func testTransportExternal(resolver dcs.Resolver, storage session.Storage) func(
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
 
-		log := zaptest.NewLogger(t)
-		defer func() { _ = log.Sync() }()
+		log := zerolog.New(zerolog.NewTestWriter(t)).With().Str("logger", "client").Logger()
 
 		require.NoError(t, tryConnect(ctx, telegram.Options{
-			Logger:         log.Named("client"),
+			Logger:         &log,
 			SessionStorage: storage,
 			Resolver:       resolver,
 		}))
+
 	}
 }
 
@@ -82,15 +79,17 @@ func TestExternalE2EUsersDialog(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	log := zaptest.NewLogger(t).WithOptions(zap.IncreaseLevel(zapcore.InfoLevel))
+	log := zerolog.New(zerolog.NewTestWriter(t)).Level(zerolog.InfoLevel)
 
 	cfg := e2etest.TestOptions{
-		Logger: log,
+		Logger: &log,
 	}
+
 	suite := e2etest.NewSuite(t, cfg)
 
 	auth := make(chan *tg.User, 1)
-	g := tdsync.NewLogGroup(ctx, log.Named("group"))
+	glg := log.With().Str("logger", "group").Logger()
+	g := tdsync.NewLogGroup(ctx, &glg)
 
 	g.Go("echobot", func(ctx context.Context) error {
 		if err := e2etest.NewEchoBot(suite, auth).Run(ctx); err != nil {

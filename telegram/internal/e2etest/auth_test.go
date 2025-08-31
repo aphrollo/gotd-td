@@ -5,11 +5,10 @@ import (
 	"testing"
 
 	"github.com/go-faster/errors"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zaptest"
-
 	"github.com/gotd/td/telegram/auth"
 	"github.com/gotd/td/tg"
+	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/require"
 )
 
 type mockFlow struct {
@@ -51,9 +50,9 @@ func (m *mockFlow) SignUp(context.Context, auth.SignUp) (*tg.AuthAuthorization, 
 
 func TestSuite_Authenticate(t *testing.T) {
 	ctx := context.Background()
-	logger := zaptest.NewLogger(t)
+	logger := zerolog.New(zerolog.NewTestWriter(t))
 	s := NewSuite(t, TestOptions{
-		Logger: logger,
+		Logger: &logger,
 	})
 	if s.manager != nil {
 		t.Skip("Not testing external manager")

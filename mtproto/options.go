@@ -4,8 +4,8 @@ import (
 	"io"
 	"time"
 
+	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/zap"
 
 	"github.com/gotd/td/bin"
 	"github.com/gotd/td/clock"
@@ -29,8 +29,8 @@ type Options struct {
 
 	// Random is random source. Defaults to crypto.
 	Random io.Reader
-	// Logger is instance of zap.Logger. No logs by default.
-	Logger *zap.Logger
+	// Logger is instance of zerolog.Logger. No logs by default.
+	Logger *zerolog.Logger
 	// Handler will be called on received message.
 	Handler Handler
 
@@ -107,7 +107,8 @@ func (opt *Options) setDefaults() {
 		opt.Random = crypto.DefaultRand()
 	}
 	if opt.Logger == nil {
-		opt.Logger = zap.NewNop()
+		nop := zerolog.Nop()
+		opt.Logger = &nop
 	}
 	if opt.AckBatchSize == 0 {
 		opt.AckBatchSize = 20

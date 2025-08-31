@@ -7,11 +7,6 @@ import (
 	"time"
 
 	"github.com/go-faster/errors"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest"
-
 	"github.com/gotd/td/session"
 	"github.com/gotd/td/tdsync"
 	"github.com/gotd/td/telegram"
@@ -24,12 +19,15 @@ import (
 	"github.com/gotd/td/tgtest/cluster"
 	"github.com/gotd/td/tgtest/services/file"
 	"github.com/gotd/td/transport"
+	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type clusterSetup struct {
 	TB      testing.TB
 	Cluster *cluster.Cluster
-	Logger  *zap.Logger
+	Logger  *zerolog.Logger
 }
 
 type clientSetup struct {
@@ -53,23 +51,23 @@ func testCluster(
 	return func(t *testing.T) {
 		t.Parallel()
 
-		log := zaptest.NewLogger(t)
-		defer func() { _ = log.Sync() }()
+		log := zerolog.New(zerolog.NewTestWriter(t))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
 		g := tdsync.NewCancellableGroup(ctx)
-
+		clg := log.With().Str("logger", "cluster").Logger()
 		c := cluster.NewCluster(cluster.Options{
 			Web:      ws,
-			Logger:   log.Named("cluster"),
+			Logger:   &clg,
 			Protocol: p,
 		})
 		setup(clusterSetup{
 			TB:      t,
 			Cluster: c,
-			Logger:  log,
+			Logger:  &log,
 		})
+
 		g.Go(c.Up)
 
 		g.Go(func(ctx context.Context) error {
@@ -79,6 +77,9 @@ func testCluster(
 			case <-ctx.Done():
 				return ctx.Err()
 			}
+			l := log.With().
+				Str("logger", "client").
+				Logger()
 
 			return run(ctx, clientSetup{
 				TB: t,
@@ -89,7 +90,7 @@ func testCluster(
 					}),
 					PublicKeys:     c.Keys(),
 					Resolver:       c.Resolver(),
-					Logger:         log.Named("client"),
+					Logger:         &l,
 					SessionStorage: &session.StorageMemory{},
 					DCList:         c.List(),
 				},
@@ -97,7 +98,7 @@ func testCluster(
 			})
 		})
 
-		log.Debug("Waiting")
+		log.Debug().Msg("Waiting")
 		if err := g.Wait(); err != nil && !errors.Is(err, context.Canceled) {
 			require.NoError(t, err)
 		}
@@ -115,7 +116,8 @@ func testTransport(p dcs.Protocol) func(t *testing.T) {
 	testMessage := "ну че там с деньгами?"
 
 	return testCluster(p, false, func(s clusterSetup) {
-		h := tgtest.TestTransport(s.TB, s.Logger.Named("handler"), testMessage)
+		tlg := s.Logger.With().Str("logger", "handler").Logger()
+		h := tgtest.TestTransport(s.TB, &tlg, testMessage)
 		d := s.Cluster.Dispatch(2, "server")
 		d.Handle(tg.MessagesSendMessageRequestTypeID, h)
 		d.Handle(tg.UsersGetUsersRequestTypeID, h)
@@ -133,7 +135,7 @@ func testTransport(p dcs.Protocol) func(t *testing.T) {
 		waitForMessage := make(chan struct{})
 		dispatcher.OnNewMessage(func(ctx context.Context, entities tg.Entities, update *tg.UpdateNewMessage) error {
 			message := update.Message.(*tg.Message).Message
-			logger.Info("Got message", zap.String("text", message))
+			logger.Info().Str("text", message).Msg("Got message")
 			assert.Equal(c.TB, testMessage, message)
 			if err := client.SendMessage(ctx, &tg.MessagesSendMessageRequest{
 				Peer:    &tg.InputPeerUser{},
@@ -142,7 +144,7 @@ func testTransport(p dcs.Protocol) func(t *testing.T) {
 				return err
 			}
 
-			logger.Info("Closing waitForMessage")
+			logger.Info().Msg("Closing waitForMessage")
 			close(waitForMessage)
 			return nil
 		})
@@ -153,7 +155,7 @@ func testTransport(p dcs.Protocol) func(t *testing.T) {
 				c.TB.Error("Failed to wait for message")
 				return ctx.Err()
 			case <-waitForMessage:
-				logger.Info("Returning")
+				logger.Info().Msg("Returning")
 				c.Complete()
 				return nil
 			}

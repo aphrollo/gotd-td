@@ -7,8 +7,6 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/go-faster/errors"
-	"go.uber.org/zap"
-
 	"github.com/gotd/td/bin"
 	"github.com/gotd/td/clock"
 	"github.com/gotd/td/mtproto"
@@ -16,6 +14,7 @@ import (
 	"github.com/gotd/td/tdsync"
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/tgerr"
+	"github.com/rs/zerolog"
 )
 
 type protoConn interface {
@@ -58,8 +57,8 @@ type Conn struct {
 
 	// Wrappers for external world, like logs or PRNG.
 	// Should be immutable.
-	clock clock.Clock // immutable
-	log   *zap.Logger // immutable
+	clock clock.Clock     // immutable
+	log   *zerolog.Logger // immutable
 
 	// Handler passed by client.
 	handler Handler // immutable
@@ -79,7 +78,7 @@ type Conn struct {
 
 // OnSession implements mtproto.Handler.
 func (c *Conn) OnSession(session mtproto.Session) error {
-	c.log.Info("SessionInit")
+	c.log.Info().Msg("SessionInit")
 	c.sessionInit.Signal()
 
 	// Waiting for config, because OnSession can occur before we set config.
@@ -113,10 +112,10 @@ func (c *Conn) trackInvoke() func() {
 		end := c.clock.Now()
 		c.latest = end
 
-		c.log.Debug("Invoke",
-			zap.Duration("duration", end.Sub(start)),
-			zap.Int("ongoing", c.ongoing),
-		)
+		c.log.Debug().
+			Dur("duration", end.Sub(start)).
+			Int("ongoing", c.ongoing).
+			Msg("Invoke")
 	}
 }
 
@@ -125,7 +124,7 @@ func (c *Conn) Run(ctx context.Context) (err error) {
 	defer c.dead.Signal()
 	defer func() {
 		if err != nil && ctx.Err() == nil {
-			c.log.Debug("Connection dead", zap.Error(err))
+			c.log.Debug().Err(err).Msg("Connection dead")
 			if c.onDead != nil {
 				c.onDead()
 			}
@@ -194,7 +193,7 @@ func (c *Conn) wrapRequest(req bin.Object) bin.Object {
 }
 
 func (c *Conn) init(ctx context.Context) error {
-	c.log.Debug("Initializing")
+	c.log.Debug().Msg("Initializing")
 
 	q := c.wrapRequest(&tg.InitConnectionRequest{
 		APIID:          c.appID,
@@ -229,9 +228,11 @@ func (c *Conn) init(ctx context.Context) error {
 
 		return nil
 	}, c.connBackoff(ctx), func(err error, duration time.Duration) {
-		c.log.Debug("Retrying connection initialization",
-			zap.Error(err), zap.Duration("duration", duration),
-		)
+		c.log.Debug().
+			Err(err).
+			Dur("duration", duration).
+			Msg("Retrying connection initialization")
+
 	}); err != nil {
 		return errors.Wrap(err, "initConnection")
 	}

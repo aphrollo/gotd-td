@@ -7,10 +7,6 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
-
 	"github.com/gotd/td/bin"
 	"github.com/gotd/td/clock"
 	"github.com/gotd/td/mtproto"
@@ -22,6 +18,9 @@ import (
 	"github.com/gotd/td/telegram/internal/manager"
 	"github.com/gotd/td/telegram/internal/version"
 	"github.com/gotd/td/tg"
+	"github.com/rs/zerolog"
+	"go.opentelemetry.io/otel/trace"
+	"go.uber.org/atomic"
 )
 
 // UpdateHandler will be called on received updates from Telegram.
@@ -106,9 +105,9 @@ type Client struct {
 	sessionsMux sync.Mutex
 
 	// Wrappers for external world, like logs or PRNG.
-	rand  io.Reader   // immutable
-	log   *zap.Logger // immutable
-	clock clock.Clock // immutable
+	rand  io.Reader       // immutable
+	log   *zerolog.Logger // immutable
+	clock clock.Clock     // immutable
 
 	// Client context. Will be canceled by Run on exit.
 	ctx    context.Context
@@ -181,9 +180,9 @@ func NewClient(appID int, appHash string, opt Options) *Client {
 
 	// Including version into client logger to help with debugging.
 	if v := version.GetVersion(); v != "" {
-		client.log = client.log.With(zap.String("v", v))
+		l := client.log.With().Str("v", v).Logger()
+		client.log = &l
 	}
-
 	if opt.SessionStorage != nil {
 		client.storage = &session.Loader{
 			Storage: opt.SessionStorage,

@@ -5,9 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"go.uber.org/zap"
-
 	"github.com/gotd/neo"
+	"github.com/rs/zerolog"
 
 	"github.com/gotd/td/bin"
 	"github.com/gotd/td/crypto"
@@ -32,9 +31,10 @@ func benchEncryption(b *testing.B, c *Conn, n int) {
 }
 
 func BenchmarkEncryption(b *testing.B) {
+	nop := zerolog.Nop()
 	c := &Conn{
 		rand:              Zero{},
-		log:               zap.NewNop(),
+		log:               &nop,
 		cipher:            crypto.NewClientCipher(Zero{}),
 		clock:             neo.NewTime(time.Now()),
 		compressThreshold: -1,

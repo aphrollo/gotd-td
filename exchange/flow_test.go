@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zaptest"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/gotd/td/crypto"
@@ -21,7 +21,7 @@ import (
 func testExchange(rsaPad bool) func(t *testing.T) {
 	return func(t *testing.T) {
 		a := require.New(t)
-		log := zaptest.NewLogger(t)
+		log := zerolog.New(zerolog.NewTestWriter(t))
 
 		dc := 2
 		reader := rand.New(rand.NewSource(1))
@@ -36,20 +36,21 @@ func testExchange(rsaPad bool) func(t *testing.T) {
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-
+		clog := log.With().Str("logger", "client").Logger()
 		g := tdsync.NewCancellableGroup(ctx)
 		g.Go(func(ctx context.Context) error {
 			_, err := NewExchanger(client, dc).
-				WithLogger(log.Named("client")).
+				WithLogger(&clog).
 				WithRand(reader).
 				Client([]PublicKey{privateKey.Public()}).
 				Run(ctx)
 			return err
 		})
 
+		slog := log.With().Str("logger", "server").Logger()
 		g.Go(func(ctx context.Context) error {
 			_, err := NewExchanger(server, dc).
-				WithLogger(log.Named("server")).
+				WithLogger(&slog).
 				WithRand(reader).
 				Server(privateKey).
 				Run(ctx)
@@ -76,7 +77,7 @@ func TestExchangeCorpus(t *testing.T) {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			dc := 2
 			reader := testutil.Rand([]byte(seed))
-			log := zaptest.NewLogger(t)
+			log := zerolog.New(zerolog.NewTestWriter(t))
 
 			i := transport.Intermediate
 			client, server := i.Pipe()
@@ -85,9 +86,10 @@ func TestExchangeCorpus(t *testing.T) {
 			defer cancel()
 
 			g, gctx := errgroup.WithContext(ctx)
+			clog := log.With().Str("logger", "client").Logger()
 			g.Go(func() error {
 				_, err := NewExchanger(client, dc).
-					WithLogger(log.Named("client")).
+					WithLogger(&clog).
 					WithRand(reader).
 					Client([]PublicKey{privateKey.Public()}).
 					Run(gctx)
@@ -96,9 +98,10 @@ func TestExchangeCorpus(t *testing.T) {
 				}
 				return err
 			})
+			slog := log.With().Str("logger", "server").Logger()
 			g.Go(func() error {
 				_, err := NewExchanger(server, dc).
-					WithLogger(log.Named("server")).
+					WithLogger(&slog).
 					WithRand(reader).
 					Server(privateKey).
 					Run(gctx)

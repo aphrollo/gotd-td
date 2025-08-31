@@ -2,8 +2,6 @@ package mtproto
 
 import (
 	"github.com/go-faster/errors"
-	"go.uber.org/zap"
-
 	"github.com/gotd/td/bin"
 	"github.com/gotd/td/crypto"
 	"github.com/gotd/td/proto"
@@ -59,7 +57,7 @@ func (c *Conn) newEncryptedMessage(id int64, seq int32, payload bin.Encoder, b *
 		}
 	}
 
-	log.Debug("Request", zap.Int64("msg_id", id))
+	log.Debug().Int64("msg_id", id).Msg("Request")
 	if err := c.cipher.Encrypt(s.Key, d, b); err != nil {
 		return errors.Wrap(err, "encrypt")
 	}

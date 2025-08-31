@@ -6,11 +6,10 @@ import (
 	"sync"
 
 	"github.com/go-faster/errors"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
-
 	"github.com/gotd/td/bin"
 	"github.com/gotd/td/tdsync"
+	"github.com/rs/zerolog"
+	"go.uber.org/atomic"
 )
 
 // DC represents connection pool to one data center.
@@ -21,7 +20,7 @@ type DC struct {
 	newConn func() Conn
 
 	// Wrappers for external world, like logs or PRNG.
-	log *zap.Logger // immutable
+	log *zerolog.Logger // immutable
 
 	// DC context. Will be canceled by Run on exit.
 	ctx    context.Context    // immutable
@@ -116,11 +115,12 @@ func (c *DC) dead(r *poolConn, deadErr error) {
 	r.dead.Signal()
 	c.stuck.Reset()
 
-	c.log.Debug("Connection died",
-		zap.Int64("remaining", remaining),
-		zap.Int64("conn_id", r.id),
-		zap.Error(deadErr),
-	)
+	c.log.Debug().
+		Int64("remaining", remaining).
+		Int64("conn_id", r.id).
+		Err(deadErr).
+		Msg("Connection died")
+
 }
 
 func (c *DC) pop() (r *poolConn, ok bool) {
@@ -143,10 +143,10 @@ func (c *DC) release(r *poolConn) {
 	defer c.mu.Unlock()
 
 	if c.freeReq.transfer(r) {
-		c.log.Debug("Transfer connection to requester", zap.Int64("conn_id", r.id))
+		c.log.Debug().Int64("conn_id", r.id).Msg("Transfer connection to requester")
 		return
 	}
-	c.log.Debug("Connection released", zap.Int64("conn_id", r.id))
+	c.log.Debug().Int64("conn_id", r.id).Msg("Connection released")
 	c.free = append(c.free, r)
 }
 
@@ -164,7 +164,7 @@ retry:
 			goto retry
 		default:
 		}
-		c.log.Debug("Re-using free connection", zap.Int64("conn_id", r.id))
+		c.log.Debug().Int64("conn_id", r.id).Msg("Re-using free connection")
 		return r, nil
 	}
 
@@ -175,9 +175,7 @@ retry:
 		c.mu.Unlock()
 
 		id := c.nextConn.Inc()
-		c.log.Debug("Creating new connection",
-			zap.Int64("conn_id", id),
-		)
+		c.log.Debug().Int64("conn_id", id).Msg("Creating new connection")
 		conn := c.createConnection(id)
 		select {
 		case <-ctx.Done():
@@ -195,17 +193,14 @@ retry:
 	// 3rd case: no free connections, can't create yet one, wait for free.
 	key, ch := c.freeReq.request()
 	c.mu.Unlock()
-	c.log.Debug("Waiting for free connect", zap.Int64("request_id", int64(key)))
+	c.log.Debug().Int64("request_id", int64(key)).Msg("Waiting for free connect")
 
 	select {
 	case conn := <-ch:
-		c.log.Debug("Got connection for request",
-			zap.Int64("conn_id", conn.id),
-			zap.Int64("request_id", int64(key)),
-		)
+		c.log.Debug().Int64("request_id", int64(key)).Int64("conn_id", conn.id).Msg("Got connection for request")
 		return conn, nil
 	case <-c.stuck.Ready():
-		c.log.Debug("Some connection dead, try to create new connection, cancel waiting")
+		c.log.Debug().Msg("Some connection dead, try to create new connection, cancel waiting")
 
 		c.freeReq.delete(key)
 		select {
@@ -251,15 +246,15 @@ func (c *DC) Invoke(ctx context.Context, input bin.Encoder, output bin.Decoder) 
 			return errors.Wrap(err, "acquire connection")
 		}
 
-		c.log.Debug("DC Invoke")
+		c.log.Debug().Msg("DC Invoke")
 		err = conn.Invoke(ctx, input, output)
 		c.release(conn)
 		if err != nil {
-			c.log.Debug("DC Invoke failed", zap.Error(err))
+			c.log.Error().Err(err).Msg("DC Invoke failed")
 			return errors.Wrap(err, "invoke pool")
 		}
 
-		c.log.Debug("DC Invoke complete")
+		c.log.Debug().Msg("DC Invoke complete")
 		return err
 	}
 }
@@ -270,8 +265,8 @@ func (c *DC) Close() error {
 	if c.closed.Swap(true) {
 		return errors.New("DC already closed")
 	}
-	c.log.Debug("Closing DC")
-	defer c.log.Debug("DC closed")
+	c.log.Debug().Msg("Closing DC")
+	defer c.log.Debug().Msg("DC closed")
 
 	c.cancel()
 	return c.grp.Wait()

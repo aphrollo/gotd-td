@@ -1,6 +1,8 @@
 package updates
 
-import "go.uber.org/zap/zapcore"
+import (
+	"github.com/rs/zerolog"
+)
 
 type gap struct {
 	from, to int
@@ -40,15 +42,17 @@ func (b *gapBuffer) Consume(u update) (accepted bool) {
 	return false
 }
 
-func (b gapBuffer) MarshalLogArray(e zapcore.ArrayEncoder) error {
+func (b gapBuffer) MarshalZerologArray(a *zerolog.Array) {
 	for _, g := range b.gaps {
-		if err := e.AppendObject(zapcore.ObjectMarshalerFunc(func(e zapcore.ObjectEncoder) error {
-			e.AddInt("from", g.from)
-			e.AddInt("to", g.to)
-			return nil
-		})); err != nil {
-			return err
-		}
+		a.Object(&gapMarshaler{from: g.from, to: g.to})
 	}
-	return nil
+}
+
+type gapMarshaler struct {
+	from int
+	to   int
+}
+
+func (g *gapMarshaler) MarshalZerologObject(e *zerolog.Event) {
+	e.Int("from", g.from).Int("to", g.to)
 }

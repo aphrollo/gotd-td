@@ -4,14 +4,13 @@ package cluster
 import (
 	"io"
 
-	"go.uber.org/zap"
-
 	"github.com/gotd/td/exchange"
 	"github.com/gotd/td/tdsync"
 	"github.com/gotd/td/telegram/dcs"
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/tgtest"
 	"github.com/gotd/td/tgtest/services/config"
+	"github.com/rs/zerolog"
 )
 
 type setup struct {
@@ -38,7 +37,7 @@ type Cluster struct {
 	// RPC dispatcher.
 	common *tgtest.Dispatcher
 
-	log      *zap.Logger
+	log      *zerolog.Logger
 	random   io.Reader
 	protocol dcs.Protocol
 }

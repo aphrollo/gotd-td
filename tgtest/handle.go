@@ -5,15 +5,13 @@ import (
 	"encoding/binary"
 
 	"github.com/go-faster/errors"
-	"go.uber.org/multierr"
-	"go.uber.org/zap"
-
 	"github.com/gotd/td/bin"
 	"github.com/gotd/td/crypto"
 	"github.com/gotd/td/mt"
 	"github.com/gotd/td/proto"
 	"github.com/gotd/td/tgerr"
 	"github.com/gotd/td/transport"
+	"go.uber.org/multierr"
 )
 
 func (s *Server) rpcHandle(ctx context.Context, c transport.Conn, b *bin.Buffer) error {
@@ -37,7 +35,9 @@ func (s *Server) rpcHandle(ctx context.Context, c transport.Conn, b *bin.Buffer)
 		AuthKey: key,
 	}
 	if conn := s.users.createConnection(msg.SessionID, c); !conn.sentCreated() {
-		s.log.Debug("Send handleSessionCreated event", zap.Inline(session))
+		s.log.Debug().
+			Interface("session", session).
+			Msg("Send handleSessionCreated event")
 		salt := int64(binary.LittleEndian.Uint64(key.ID[:]))
 		if err := s.sendSessionCreated(ctx, session, salt); err != nil {
 			return err
@@ -67,11 +67,11 @@ func (s *Server) handle(req *Request) error {
 		return errors.Wrap(err, "peek id")
 	}
 
-	s.log.Debug("Got request",
-		zap.Inline(req.Session),
-		zap.Int64("msg_id", req.MsgID),
-		zap.String("type", s.types.Get(id)),
-	)
+	s.log.Debug().
+		Interface("session", req.Session).
+		Int64("msg_id", req.MsgID).
+		Str("type", s.types.Get(id)).
+		Msg("Got request")
 
 	// TODO(tdakkota): unpack all containers
 	switch id {

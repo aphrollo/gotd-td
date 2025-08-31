@@ -3,16 +3,15 @@ package exchange
 import (
 	"io"
 
-	"go.uber.org/zap"
-
 	"github.com/gotd/td/crypto"
+	"github.com/rs/zerolog"
 )
 
 // ClientExchange is a client-side key exchange flow.
 type ClientExchange struct {
 	unencryptedWriter
 	rand io.Reader
-	log  *zap.Logger
+	log  *zerolog.Logger
 
 	keys []PublicKey
 	dc   int

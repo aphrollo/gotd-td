@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zaptest"
 )
 
 func TestSequenceBox(t *testing.T) {
@@ -15,6 +15,8 @@ func TestSequenceBox(t *testing.T) {
 	)
 
 	ctx := context.Background()
+	logger := zerolog.New(zerolog.NewTestWriter(t))
+
 	box := newSequenceBox(sequenceConfig{
 		InitialState: 3,
 		Apply: func(ctx context.Context, s int, u []update) error {
@@ -22,7 +24,7 @@ func TestSequenceBox(t *testing.T) {
 			updates = append(updates, u...)
 			return nil
 		},
-		Logger: zaptest.NewLogger(t),
+		Logger: &logger,
 	})
 
 	require.Nil(t, box.Handle(ctx, update{
@@ -151,13 +153,15 @@ func TestSequenceBoxApplyPending(t *testing.T) {
 
 	for _, test := range tests {
 		applied := make([]update, 0)
+		logger := zerolog.New(zerolog.NewTestWriter(t))
+
 		box := newSequenceBox(sequenceConfig{
 			InitialState: test.InitialState,
 			Apply: func(_ context.Context, s int, u []update) error {
 				applied = append(applied, u...)
 				return nil
 			},
-			Logger: zaptest.NewLogger(t),
+			Logger: &logger,
 		})
 
 		box.pending = test.Pending

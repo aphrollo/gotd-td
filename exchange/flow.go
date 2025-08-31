@@ -6,7 +6,7 @@ import (
 	"io"
 	"time"
 
-	"go.uber.org/zap"
+	"github.com/rs/zerolog"
 
 	"github.com/gotd/td/clock"
 	"github.com/gotd/td/crypto"
@@ -23,7 +23,7 @@ type Exchanger struct {
 
 	clock   clock.Clock
 	rand    io.Reader
-	log     *zap.Logger
+	log     *zerolog.Logger
 	timeout time.Duration
 	dc      int
 }
@@ -41,7 +41,7 @@ func (e Exchanger) WithRand(reader io.Reader) Exchanger {
 }
 
 // WithLogger sets exchange flow logger.
-func (e Exchanger) WithLogger(log *zap.Logger) Exchanger {
+func (e Exchanger) WithLogger(log *zerolog.Logger) Exchanger {
 	e.log = log
 	return e
 }
@@ -54,12 +54,13 @@ func (e Exchanger) WithTimeout(timeout time.Duration) Exchanger {
 
 // NewExchanger creates new Exchanger.
 func NewExchanger(conn transport.Conn, dc int) Exchanger {
+	nop := zerolog.Nop()
 	return Exchanger{
 		conn: conn,
 
 		clock:   clock.System,
 		rand:    crypto.DefaultRand(),
-		log:     zap.NewNop(),
+		log:     &nop,
 		timeout: DefaultTimeout,
 		dc:      dc,
 	}

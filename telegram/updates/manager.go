@@ -5,8 +5,8 @@ import (
 	"sync"
 
 	"github.com/go-faster/errors"
+	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/gotd/td/telegram"
@@ -32,7 +32,7 @@ type Manager struct {
 	// immutable:
 
 	cfg    Config
-	lg     *zap.Logger
+	lg     *zerolog.Logger
 	tracer trace.Tracer
 }
 
@@ -56,15 +56,15 @@ func (m *Manager) Handle(ctx context.Context, u tg.UpdatesClass) error {
 	ctx, span := m.tracer.Start(ctx, "updates.Manager.Handle")
 	defer span.End()
 
-	m.lg.Debug("Handle")
-	defer m.lg.Debug("Handled")
+	m.lg.Debug().Msg("Handle")
+	defer m.lg.Debug().Msg("Handled")
 
 	m.mux.Lock()
 	state := m.state
 	m.mux.Unlock()
 
 	if state == nil {
-		m.lg.Debug("Handle (no internalState)")
+		m.lg.Debug().Msg("Handle (no internalState)")
 		return m.cfg.Handler.Handle(ctx, u)
 	}
 
@@ -82,13 +82,13 @@ type AuthOptions struct {
 // If forget is true, local internalState (if exist) will be overwritten
 // with remote internalState.
 func (m *Manager) Run(ctx context.Context, api API, userID int64, opt AuthOptions) error {
-	lg := m.lg.With(
-		zap.Int64("user_id", userID),
-		zap.Bool("is_bot", opt.IsBot),
-		zap.Bool("forget", opt.Forget),
-	)
-	lg.Debug("Run")
-	defer lg.Debug("Done")
+	lg := m.lg.With().
+		Int64("user_id", userID).
+		Bool("is_bot", opt.IsBot).
+		Bool("forget", opt.Forget).
+		Logger()
+	lg.Debug().Msg("Run")
+	defer lg.Debug().Msg("Done")
 
 	wg, ctx := errgroup.WithContext(ctx)
 
@@ -157,7 +157,7 @@ func (m *Manager) Run(ctx context.Context, api API, userID int64, opt AuthOption
 	wg.Go(func() error {
 		return m.state.Run(ctx)
 	})
-	lg.Debug("Wait")
+	lg.Debug().Msg("Wait")
 	return wg.Wait()
 }
 

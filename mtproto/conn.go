@@ -7,9 +7,6 @@ import (
 	"time"
 
 	"github.com/go-faster/errors"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
-
 	"github.com/gotd/td/bin"
 	"github.com/gotd/td/clock"
 	"github.com/gotd/td/crypto"
@@ -20,6 +17,8 @@ import (
 	"github.com/gotd/td/tdsync"
 	"github.com/gotd/td/tmap"
 	"github.com/gotd/td/transport"
+	"github.com/rs/zerolog"
+	"go.uber.org/atomic"
 )
 
 // Handler will be called on received message from Telegram.
@@ -63,7 +62,7 @@ type Conn struct {
 	clock        clock.Clock
 	rand         io.Reader
 	cipher       Cipher
-	log          *zap.Logger
+	log          *zerolog.Logger
 	messageID    MessageIDSource
 	messageIDBuf MessageBuf // replay attack protection
 
@@ -154,8 +153,11 @@ func New(dialer Dialer, opt Options) *Conn {
 		getTimeout:        opt.RequestTimeout,
 	}
 	if conn.rpc == nil {
+		l := opt.Logger.With().
+			Str("logger", "rpc").
+			Logger()
 		conn.rpc = rpc.New(conn.writeContentMessage, rpc.Options{
-			Logger:        opt.Logger.Named("rpc"),
+			Logger:        &l,
 			RetryInterval: opt.RetryInterval,
 			MaxRetries:    opt.MaxRetries,
 			Clock:         opt.Clock,
@@ -169,13 +171,11 @@ func New(dialer Dialer, opt Options) *Conn {
 // handleClose closes rpc engine and underlying connection on context done.
 func (c *Conn) handleClose(ctx context.Context) error {
 	<-ctx.Done()
-	c.log.Debug("Closing")
+	c.log.Debug().Msg("Closing")
 
-	// Close RPC Engine.
 	c.rpc.ForceClose()
-	// Close connection.
 	if err := c.conn.Close(); err != nil {
-		c.log.Debug("Failed to cleanup connection", zap.Error(err))
+		c.log.Debug().Err(err).Msg("Failed to cleanup connection")
 	}
 	return nil
 }
@@ -184,10 +184,6 @@ func (c *Conn) handleClose(ctx context.Context) error {
 //
 // When connection is ready, Handler.OnSession is called.
 func (c *Conn) Run(ctx context.Context, f func(ctx context.Context) error) error {
-	// Starting connection.
-	//
-	// This will send initial packet to telegram and perform key exchange
-	// if needed.
 	if c.ran.Swap(true) {
 		return errors.New("do Run on closed connection")
 	}
@@ -195,24 +191,24 @@ func (c *Conn) Run(ctx context.Context, f func(ctx context.Context) error) error
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	c.log.Debug("Run: start")
-	defer c.log.Debug("Run: end")
+	c.log.Debug().Msg("Run: start")
+	defer c.log.Debug().Msg("Run: end")
+
 	if err := c.connect(ctx); err != nil {
 		return errors.Wrap(err, "start")
 	}
-	{
-		// All goroutines are bound to current call.
-		g := tdsync.NewLogGroup(ctx, c.log.Named("group"))
-		g.Go("handleClose", c.handleClose)
-		g.Go("pingLoop", c.pingLoop)
-		g.Go("ackLoop", c.ackLoop)
-		g.Go("saltsLoop", c.saltLoop)
-		g.Go("userCallback", f)
-		g.Go("readLoop", c.readLoop)
+	lg := c.log.With().Str("logger", "group").Logger()
+	g := tdsync.NewLogGroup(ctx, &lg)
+	g.Go("handleClose", c.handleClose)
+	g.Go("pingLoop", c.pingLoop)
+	g.Go("ackLoop", c.ackLoop)
+	g.Go("saltsLoop", c.saltLoop)
+	g.Go("userCallback", f)
+	g.Go("readLoop", c.readLoop)
 
-		if err := g.Wait(); err != nil {
-			return errors.Wrap(err, "group")
-		}
+	if err := g.Wait(); err != nil {
+		return errors.Wrap(err, "group")
 	}
+
 	return nil
 }

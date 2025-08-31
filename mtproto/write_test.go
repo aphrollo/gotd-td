@@ -7,10 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
 	"github.com/gotd/neo"
+	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/require"
 
 	"github.com/gotd/td/crypto"
 	"github.com/gotd/td/testutil"
@@ -19,7 +18,7 @@ import (
 func benchWrite(payloadSize int) func(b *testing.B) {
 	return func(b *testing.B) {
 		a := require.New(b)
-		logger := zap.NewNop()
+		logger := zerolog.Nop()
 		random := rand.Reader
 		c := neo.NewTime(time.Now())
 
@@ -38,7 +37,7 @@ func benchWrite(payloadSize int) func(b *testing.B) {
 			clock:             c,
 			rand:              random,
 			cipher:            crypto.NewClientCipher(random),
-			log:               logger,
+			log:               &logger,
 			authKey:           authKey,
 			compressThreshold: -1,
 		}

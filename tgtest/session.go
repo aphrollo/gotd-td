@@ -3,9 +3,8 @@ package tgtest
 import (
 	"encoding/hex"
 
-	"go.uber.org/zap/zapcore"
-
 	"github.com/gotd/td/crypto"
+	"github.com/rs/zerolog"
 )
 
 // Session represents connection session.
@@ -16,9 +15,8 @@ type Session struct {
 	AuthKey crypto.AuthKey
 }
 
-// MarshalLogObject implements zap.ObjectMarshaler.
-func (s Session) MarshalLogObject(encoder zapcore.ObjectEncoder) error {
-	encoder.AddInt64("session_id", s.ID)
-	encoder.AddString("key_id", hex.EncodeToString(s.AuthKey.ID[:]))
-	return nil
+// MarshalZerologObject implements zerolog.LogObjectMarshaler.
+func (s Session) MarshalZerologObject(e *zerolog.Event) {
+	e.Int64("session_id", s.ID).
+		Str("key_id", hex.EncodeToString(s.AuthKey.ID[:]))
 }

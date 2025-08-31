@@ -13,13 +13,9 @@ import (
 	"time"
 
 	"github.com/go-faster/errors"
+	"github.com/rs/zerolog"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
-
 	"github.com/gotd/td/bin"
 	"github.com/gotd/td/mt"
 	"github.com/gotd/td/proto"
@@ -30,6 +26,9 @@ import (
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/tgmock"
 	"github.com/gotd/td/tmap"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
 )
 
 type testHandler func(id int64, body bin.Encoder) (bin.Encoder, error)
@@ -77,8 +76,9 @@ func newTestClient(h testHandler) *Client {
 
 	ready := tdsync.NewReady()
 	ready.Signal()
+	nop := zerolog.Nop()
 	client := &Client{
-		log:           zap.NewNop(),
+		log:           &nop,
 		rand:          rand.New(rand.NewSource(1)),
 		appID:         TestAppID,
 		appHash:       TestAppHash,

@@ -4,24 +4,27 @@ import (
 	"context"
 
 	"github.com/go-faster/errors"
-	"go.uber.org/zap"
-
 	"github.com/gotd/td/mt"
 )
 
 func (c *Conn) ackLoop(ctx context.Context) error {
-	log := c.log.Named("ack")
+	log := c.log.With().
+		Str("logger", "ack").
+		Logger()
 
 	var buf []int64
 	send := func() {
 		defer func() { buf = buf[:0] }()
 
 		if err := c.writeServiceMessage(ctx, &mt.MsgsAck{MsgIDs: buf}); err != nil {
-			c.log.Error("Failed to ACK", zap.Error(err))
+			c.log.Error().Err(err).Msg("Failed to ACK")
 			return
 		}
 
-		log.Debug("Ack", zap.Int64s("msg_ids", buf))
+		log.Debug().
+			Ints64("msg_ids", buf).
+			Msg("Ack")
+
 	}
 
 	ticker := c.clock.Ticker(c.ackInterval)

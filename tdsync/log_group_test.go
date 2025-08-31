@@ -1,25 +1,25 @@
 package tdsync
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/go-faster/errors"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"go.uber.org/zap/zaptest"
-
 	"github.com/gotd/td/clock"
+	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLogGroup(t *testing.T) {
-	hook := func(e zapcore.Entry) error {
-		require.Contains(t, e.LoggerName, "group")
-		return nil
-	}
-	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.Hooks(hook)))
-	grp := NewLogGroup(context.Background(), log.Named("group"))
+	a := require.New(t)
+
+	var buf bytes.Buffer
+	logger := zerolog.New(&buf).With().Str("logger", "group").Logger()
+
+	grp := NewLogGroup(context.Background(), &logger)
 	grp.SetClock(clock.System)
 
 	grp.Go("test-task", func(groupCtx context.Context) error {
@@ -33,7 +33,20 @@ func TestLogGroup(t *testing.T) {
 	})
 
 	grp.Cancel()
-	if err := grp.Wait(); !errors.Is(err, context.Canceled) {
-		t.Error(err)
+	err := grp.Wait()
+	a.True(errors.Is(err, context.Canceled))
+
+	// Inspect logs to verify "group" is present
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	a.Greater(len(lines), 0)
+	found := false
+	for _, line := range lines {
+		var entry map[string]interface{}
+		a.NoError(json.Unmarshal([]byte(line), &entry))
+		if loggerName, ok := entry["logger"]; ok && loggerName == "group" {
+			found = true
+			break
+		}
 	}
+	a.True(found, "expected log with logger='group'")
 }

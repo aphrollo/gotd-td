@@ -2,8 +2,6 @@ package mtproto
 
 import (
 	"github.com/go-faster/errors"
-	"go.uber.org/zap"
-
 	"github.com/gotd/td/bin"
 	"github.com/gotd/td/mt"
 )
@@ -14,7 +12,7 @@ func (c *Conn) handleAck(b *bin.Buffer) error {
 		return errors.Wrap(err, "decode")
 	}
 
-	c.log.Debug("Received ack", zap.Int64s("msg_ids", ack.MsgIDs))
+	c.log.Debug().Ints64("msg_ids", ack.MsgIDs).Msg("Received ack")
 	c.rpc.NotifyAcks(ack.MsgIDs)
 
 	return nil

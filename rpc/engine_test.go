@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/go-faster/errors"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zaptest"
 	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 
@@ -36,37 +36,37 @@ func TestRPCError(t *testing.T) {
 	clock := neo.NewTime(defaultNow)
 	observer := clock.Observe()
 	expectedErr := errors.New("server side error")
-	log := zaptest.NewLogger(t)
+	log := zerolog.New(zerolog.NewTestWriter(t))
 
 	server := func(t *testing.T, e *Engine, incoming <-chan request) error {
-		log := log.Named("server")
+		log := log.With().Str("logger", "server").Logger()
 
-		log.Info("Waiting ping request")
+		log.Info().Msg("Waiting ping request")
 		require.Equal(t, request{
 			MsgID: msgID,
 			SeqNo: seqNo,
 			Input: &mt.PingRequest{PingID: pingID},
 		}, <-incoming)
 
-		log.Info("Got ping request")
+		log.Info().Msg("Got ping request")
 
 		// Make sure that client calls time.After
 		// before time travel
 		<-observer
 
-		log.Info("Traveling into the future for a second (simulate job)")
+		log.Info().Msg("Traveling into the future for a second (simulate job)")
 		clock.Travel(time.Second)
 
-		log.Info("Sending RPC error")
+		log.Info().Msg("Sending RPC error")
 		e.NotifyError(msgID, expectedErr)
 
 		return nil
 	}
 
 	client := func(t *testing.T, e *Engine) error {
-		log := log.Named("client")
+		log := log.With().Str("logger", "client").Logger()
 
-		log.Info("Sending ping request")
+		log.Info().Msg("Sending ping request")
 		err := e.Do(context.TODO(), Request{
 			MsgID: msgID,
 			SeqNo: seqNo,
@@ -75,41 +75,42 @@ func TestRPCError(t *testing.T) {
 			},
 		})
 
-		log.Info("Got pong response")
+		log.Info().Msg("Got pong response")
 		require.True(t, errors.Is(err, expectedErr), "expected error")
 
 		return nil
 	}
-
+	rlg := log.With().Str("logger", "rpc").Logger()
 	runTest(t, Options{
 		RetryInterval: time.Second * 3,
 		MaxRetries:    2,
 		Clock:         clock,
-		Logger:        log.Named("rpc"),
+		Logger:        &rlg,
 	}, server, client)
+
 }
 
 func TestRPCResult(t *testing.T) {
 	clock := neo.NewTime(defaultNow)
 	observer := clock.Observe()
-	log := zaptest.NewLogger(t)
+	log := zerolog.New(zerolog.NewTestWriter(t))
 
 	server := func(t *testing.T, e *Engine, incoming <-chan request) error {
-		log := log.Named("server")
+		log := log.With().Str("logger", "server").Logger()
 
-		log.Info("Waiting ping request")
+		log.Info().Msg("Waiting ping request")
 		require.Equal(t, request{
 			MsgID: msgID,
 			SeqNo: seqNo,
 			Input: &mt.PingRequest{PingID: pingID},
 		}, <-incoming)
 
-		log.Info("Got ping request")
+		log.Info().Msg("Got ping request")
 		// Make sure that engine calls time.After
 		// before time travel.
 		<-observer
 
-		log.Info("Traveling into the future for 2 seconds (simulate job)")
+		log.Info().Msg("Traveling into the future for 2 seconds (simulate job)")
 		clock.Travel(time.Second * 2)
 
 		var b bin.Buffer
@@ -120,14 +121,14 @@ func TestRPCResult(t *testing.T) {
 			return err
 		}
 
-		log.Info("Sending pong response")
+		log.Info().Msg("Sending pong response")
 		return e.NotifyResult(msgID, &b)
 	}
 
 	client := func(t *testing.T, e *Engine) error {
-		log := log.Named("client")
+		log := log.With().Str("logger", "client").Logger()
 
-		log.Info("Sending ping request")
+		log.Info().Msg("Sending ping request")
 		var out mt.Pong
 		require.NoError(t, e.Do(context.TODO(), Request{
 			MsgID:  msgID,
@@ -136,7 +137,7 @@ func TestRPCResult(t *testing.T) {
 			Output: &out,
 		}))
 
-		log.Info("Got pong response")
+		log.Info().Msg("Got pong response")
 		require.Equal(t, mt.Pong{
 			MsgID:  msgID,
 			PingID: pingID,
@@ -145,23 +146,25 @@ func TestRPCResult(t *testing.T) {
 		return nil
 	}
 
+	lg := log.With().Str("logger", "rpc").Logger()
 	runTest(t, Options{
 		RetryInterval: time.Second * 4,
 		MaxRetries:    2,
 		Clock:         clock,
-		Logger:        log.Named("rpc"),
+		Logger:        &lg,
 	}, server, client)
+
 }
 
 func TestRPCAckThenResult(t *testing.T) {
 	clock := neo.NewTime(defaultNow)
 	observer := clock.Observe()
-	log := zaptest.NewLogger(t)
+	log := zerolog.New(zerolog.NewTestWriter(t))
 
 	server := func(t *testing.T, e *Engine, incoming <-chan request) error {
-		log := log.Named("server")
+		log := log.With().Str("logger", "server").Logger()
 
-		log.Info("Waiting ping request")
+		log.Info().Msg("Waiting ping request")
 		require.Equal(t, request{
 			MsgID: msgID,
 			SeqNo: seqNo,
@@ -172,13 +175,13 @@ func TestRPCAckThenResult(t *testing.T) {
 		// before time travel.
 		<-observer
 
-		log.Info("Traveling into the future for 2 seconds (simulate job)")
+		log.Info().Msg("Traveling into the future for 2 seconds (simulate job)")
 		clock.Travel(time.Second * 2)
 
-		log.Info("Sending ACK")
+		log.Info().Msg("Sending ACK")
 		e.NotifyAcks([]int64{msgID})
 
-		log.Info("Traveling into the future for 6 seconds (simulate request processing)")
+		log.Info().Msg("Traveling into the future for 6 seconds (simulate request processing)")
 		clock.Travel(time.Second * 6)
 
 		var b bin.Buffer
@@ -189,14 +192,14 @@ func TestRPCAckThenResult(t *testing.T) {
 			return err
 		}
 
-		log.Info("Sending response")
+		log.Info().Msg("Sending response")
 		return e.NotifyResult(msgID, &b)
 	}
 
 	client := func(t *testing.T, e *Engine) error {
-		log := log.Named("client")
+		log := log.With().Str("logger", "client").Logger()
 
-		log.Info("Sending ping request")
+		log.Info().Msg("Sending ping request")
 		var out mt.Pong
 		require.NoError(t, e.Do(context.TODO(), Request{
 			MsgID:  msgID,
@@ -205,7 +208,7 @@ func TestRPCAckThenResult(t *testing.T) {
 			Output: &out,
 		}))
 
-		log.Info("Got pong response")
+		log.Info().Msg("Got pong response")
 		require.Equal(t, mt.Pong{
 			MsgID:  msgID,
 			PingID: pingID,
@@ -214,44 +217,45 @@ func TestRPCAckThenResult(t *testing.T) {
 		return nil
 	}
 
+	lg := log.With().Str("logger", "rpc").Logger()
 	runTest(t, Options{
 		RetryInterval: time.Second * 4,
 		MaxRetries:    2,
 		Clock:         clock,
-		Logger:        log.Named("rpc"),
+		Logger:        &lg,
 	}, server, client)
 }
 
 func TestRPCWithRetryResult(t *testing.T) {
 	clock := neo.NewTime(defaultNow)
 	observer := clock.Observe()
-	log := zaptest.NewLogger(t)
+	log := zerolog.New(zerolog.NewTestWriter(t))
 
 	server := func(t *testing.T, e *Engine, incoming <-chan request) error {
-		log := log.Named("server")
+		log := log.With().Str("logger", "server").Logger()
 
-		log.Info("Waiting ping request")
+		log.Info().Msg("Waiting ping request")
 		require.Equal(t, request{
 			MsgID: msgID,
 			SeqNo: seqNo,
 			Input: &mt.PingRequest{PingID: pingID},
 		}, <-incoming)
-		log.Info("Got ping request")
+		log.Info().Msg("Got ping request")
 
 		// Make sure that client calls time.After
 		// before time travel.
 		<-observer
 
-		log.Info("Traveling into the future for 6 seconds (simulate request loss)")
+		log.Info().Msg("Traveling into the future for 6 seconds (simulate request loss)")
 		clock.Travel(time.Second * 6)
 
-		log.Info("Waiting re-sending request")
+		log.Info().Msg("Waiting re-sending request")
 		require.Equal(t, request{
 			MsgID: msgID,
 			SeqNo: seqNo,
 			Input: &mt.PingRequest{PingID: pingID},
 		}, <-incoming)
-		log.Info("Got ping request")
+		log.Info().Msg("Got ping request")
 
 		var b bin.Buffer
 		if err := b.Encode(&mt.Pong{
@@ -261,23 +265,23 @@ func TestRPCWithRetryResult(t *testing.T) {
 			return err
 		}
 
-		log.Info("Send pong response")
+		log.Info().Msg("Send pong response")
 		return e.NotifyResult(msgID, &b)
 	}
 
 	client := func(t *testing.T, e *Engine) error {
-		log := log.Named("client")
+		log := log.With().Str("logger", "client").Logger()
 
-		log.Info("Sending ping request")
+		log.Info().Msg("Sending ping request")
 		var out mt.Pong
 		require.NoError(t, e.Do(context.TODO(), Request{
-			MsgID:  1,
+			MsgID:  msgID,
 			SeqNo:  seqNo,
 			Input:  &mt.PingRequest{PingID: pingID},
 			Output: &out,
 		}))
 
-		log.Info("Got pong response")
+		log.Info().Msg("Got pong response")
 		require.Equal(t, mt.Pong{
 			MsgID:  msgID,
 			PingID: pingID,
@@ -286,17 +290,19 @@ func TestRPCWithRetryResult(t *testing.T) {
 		return nil
 	}
 
+	lg := log.With().Str("logger", "rpc").Logger()
 	runTest(t, Options{
 		RetryInterval: time.Second * 4,
 		MaxRetries:    5,
 		Clock:         clock,
-		Logger:        log.Named("rpc"),
+		Logger:        &lg,
 	}, server, client)
+
 }
 
 func TestEngineGracefulShutdown(t *testing.T) {
 	var (
-		log             = zaptest.NewLogger(t)
+		log             = zerolog.New(zerolog.NewTestWriter(t))
 		expectedErr     = errors.New("server side error")
 		requestsCount   = 10
 		serverRecv      sync.WaitGroup
@@ -307,19 +313,19 @@ func TestEngineGracefulShutdown(t *testing.T) {
 	canSendResponse.Lock()
 
 	server := func(t *testing.T, e *Engine, incoming <-chan request) error {
-		log := log.Named("server")
+		log := log.With().Str("logger", "server").Logger()
 
 		var batch []request
 		for i := 0; i < requestsCount; i++ {
 			batch = append(batch, <-incoming)
 			serverRecv.Done()
 		}
-		e.log.Info("Got all requests")
+		e.log.Info().Msg("Got all requests")
 
 		canSendResponse.Lock()
-		e.log.Info("Sending responses")
+		e.log.Info().Msg("Sending responses")
 		for _, req := range batch {
-			log.Info("send response")
+			log.Info().Msg("send response")
 			e.NotifyError(req.MsgID, expectedErr)
 		}
 		canSendResponse.Unlock()
@@ -354,24 +360,25 @@ func TestEngineGracefulShutdown(t *testing.T) {
 		return nil
 	}
 
+	lg := log.With().Str("logger", "rpc").Logger()
 	runTest(t, Options{
 		RetryInterval: time.Second * 5,
 		MaxRetries:    5,
-		Logger:        log.Named("rpc"),
+		Logger:        &lg,
 	}, server, client)
 }
 
 func TestDropRPC(t *testing.T) {
 	clock := neo.NewTime(defaultNow)
-	log := zaptest.NewLogger(t)
+	log := zerolog.New(zerolog.NewTestWriter(t))
 	serverRecvRequest := make(chan struct{})
 	clientCancelledCtx := make(chan struct{})
 	dropChan := make(chan Request)
 
 	server := func(t *testing.T, e *Engine, incoming <-chan request) error {
-		log := log.Named("server")
+		log := log.With().Str("logger", "server").Logger()
 
-		log.Info("Waiting ping request")
+		log.Info().Msg("Waiting ping request")
 		require.Equal(t, request{
 			MsgID: msgID,
 			SeqNo: seqNo,
@@ -381,22 +388,22 @@ func TestDropRPC(t *testing.T) {
 		close(serverRecvRequest)
 		<-clientCancelledCtx
 
-		log.Info("Waiting drop request")
+		log.Info().Msg("Waiting drop request")
 		require.Equal(t, msgID, (<-dropChan).MsgID)
 		return nil
 	}
 
 	client := func(t *testing.T, e *Engine) error {
-		log := log.Named("client")
+		log := log.With().Str("logger", "client").Logger()
 
-		log.Info("Sending ping request")
+		log.Info().Msg("Sending ping request")
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
 		go func() {
 			<-serverRecvRequest
-			log.Info("Canceling request context")
+			log.Info().Msg("Canceling request context")
 			cancel()
 			close(clientCancelledCtx)
 		}()
@@ -411,13 +418,15 @@ func TestDropRPC(t *testing.T) {
 		return nil
 	}
 
+	lg := log.With().Str("logger", "rpc").Logger()
 	runTest(t, Options{
 		RetryInterval: time.Second * 4,
 		MaxRetries:    2,
 		Clock:         clock,
-		Logger:        log.Named("rpc"),
+		Logger:        &lg,
 		DropHandler:   func(req Request) error { dropChan <- req; return nil },
 	}, server, client)
+
 }
 
 func runTest(
@@ -453,5 +462,5 @@ func runTest(
 
 	require.NoError(t, g.Wait())
 	e.Close()
-	require.NoError(t, cfg.Logger.Sync())
+	//require.NoError(t, cfg.Logger.Err())
 }

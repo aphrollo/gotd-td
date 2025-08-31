@@ -4,10 +4,11 @@ package exchange
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
-	"go.uber.org/zap"
+	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/gotd/td/testutil"
@@ -23,12 +24,7 @@ func FuzzValid(f *testing.F) {
 			RSA: testutil.RSAPrivateKey(),
 		}
 
-		config := zap.NewProductionConfig()
-		config.OutputPaths = []string{"stdout"}
-		log, err := config.Build()
-		if err != nil {
-			t.Fatal(err)
-		}
+		logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout}).Level(zerolog.InfoLevel)
 
 		i := transport.Intermediate
 		client, server := i.Pipe()
@@ -37,9 +33,10 @@ func FuzzValid(f *testing.F) {
 		defer cancel()
 
 		g, gctx := errgroup.WithContext(ctx)
+		clog := logger.With().Str("logger", "client").Logger()
 		g.Go(func() error {
 			_, err := NewExchanger(client, dc).
-				WithLogger(log.Named("client")).
+				WithLogger(&clog).
 				WithRand(reader).
 				Client([]PublicKey{privateKey.Public()}).
 				Run(gctx)
@@ -48,9 +45,10 @@ func FuzzValid(f *testing.F) {
 			}
 			return err
 		})
+		slog := logger.With().Str("logger", "server").Logger()
 		g.Go(func() error {
 			_, err := NewExchanger(server, dc).
-				WithLogger(log.Named("server")).
+				WithLogger(&slog).
 				WithRand(reader).
 				Server(privateKey).
 				Run(gctx)

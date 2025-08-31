@@ -3,11 +3,10 @@ package updates
 import (
 	"context"
 
-	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/zap"
-
 	"github.com/gotd/td/telegram"
 	"github.com/gotd/td/tg"
+	"github.com/rs/zerolog"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // API is the interface which contains
@@ -32,7 +31,7 @@ type Config struct {
 	// In-mem used if not provided.
 	AccessHasher ChannelAccessHasher
 	// Logger (optional).
-	Logger *zap.Logger
+	Logger *zerolog.Logger
 	// TracerProvider (optional).
 	TracerProvider trace.TracerProvider
 }
@@ -45,7 +44,8 @@ func (cfg *Config) setDefaults() {
 		cfg.AccessHasher = newMemAccessHasher()
 	}
 	if cfg.Logger == nil {
-		cfg.Logger = zap.NewNop()
+		nop := zerolog.Nop()
+		cfg.Logger = &nop
 	}
 	if cfg.TracerProvider == nil {
 		cfg.TracerProvider = trace.NewNoopTracerProvider()
@@ -55,7 +55,7 @@ func (cfg *Config) setDefaults() {
 	}
 	if cfg.OnChannelTooLong == nil {
 		cfg.OnChannelTooLong = func(channelID int64) {
-			cfg.Logger.Error("Difference too long", zap.Int64("channel_id", channelID))
+			cfg.Logger.Error().Int64("channel_id", channelID).Msg("Difference too long")
 		}
 	}
 }

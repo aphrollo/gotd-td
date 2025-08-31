@@ -7,8 +7,6 @@ import (
 	"time"
 
 	"github.com/go-faster/errors"
-	"go.uber.org/zap"
-
 	"github.com/gotd/td/bin"
 	"github.com/gotd/td/mt"
 	"github.com/gotd/td/proto"
@@ -16,6 +14,7 @@ import (
 	"github.com/gotd/td/testutil"
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/tmap"
+	"github.com/rs/zerolog"
 )
 
 type fuzzHandler struct {
@@ -63,10 +62,11 @@ func init() {
 			mt.TypesConstructorMap(),
 		),
 	}
+	nop := zerolog.Nop()
 	c := &Conn{
 		rand:      testutil.ZeroRand{},
 		rpc:       rpc.New(rpc.NopSend, rpc.Options{}),
-		log:       zap.NewNop(),
+		log:       &nop,
 		messageID: proto.NewMessageIDGen(time.Now),
 		handler:   handler,
 	}

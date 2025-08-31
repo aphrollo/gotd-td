@@ -5,15 +5,14 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"go.uber.org/zap"
-
 	"github.com/gotd/td/tg"
+	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/assert"
 )
 
 type testTransportHandler struct {
 	t      testing.TB
-	logger *zap.Logger
+	logger *zerolog.Logger
 	// For ACK testing proposes.
 	// We send ack only after second request
 	counter   int
@@ -23,7 +22,7 @@ type testTransportHandler struct {
 }
 
 // TestTransport is a handler for testing MTProto transport.
-func TestTransport(t testing.TB, logger *zap.Logger, message string) Handler {
+func TestTransport(t testing.TB, logger *zerolog.Logger, message string) Handler {
 	return &testTransportHandler{
 		t:       t,
 		logger:  logger,
@@ -37,7 +36,7 @@ func (h *testTransportHandler) OnMessage(server *Server, req *Request) error {
 		return err
 	}
 
-	h.logger.Info("New message", zap.String("id", fmt.Sprintf("%#x", id)))
+	h.logger.Info().Str("id", fmt.Sprintf("%#x", id)).Msg("New message")
 
 	switch id {
 	case tg.UsersGetUsersRequestTypeID:
@@ -46,7 +45,7 @@ func (h *testTransportHandler) OnMessage(server *Server, req *Request) error {
 		if err := getUsers.Decode(req.Buf); err != nil {
 			return err
 		}
-		h.logger.Info("New client connected, invoke received")
+		h.logger.Info().Msg("New client connected, invoke received")
 
 		if err := server.SendVector(req, &tg.User{
 			ID:         10,
@@ -56,7 +55,7 @@ func (h *testTransportHandler) OnMessage(server *Server, req *Request) error {
 			return err
 		}
 
-		h.logger.Info("Sending message", zap.String("message", h.message))
+		h.logger.Info().Str("message", h.message).Msg("Sending message")
 		return server.SendUpdates(req.RequestCtx, req.Session, &tg.UpdateNewMessage{
 			Message: &tg.Message{
 				ID:      1,

@@ -8,7 +8,7 @@ import (
 
 	"github.com/go-faster/errors"
 	"github.com/go-faster/jx"
-	"go.uber.org/zap/zapcore"
+	"github.com/rs/zerolog"
 )
 
 // See https://core.telegram.org/mtproto/description#defining-aes-key-and-initialization-vector
@@ -125,8 +125,7 @@ func (a AuthKey) String() string {
 	return fmt.Sprintf("Key(id: %x)", a.ID)
 }
 
-// MarshalLogObject implements zap.ObjectMarshaler.
-func (a AuthKey) MarshalLogObject(encoder zapcore.ObjectEncoder) error {
-	encoder.AddString("id", hex.EncodeToString(a.ID[:]))
-	return nil
+// MarshalZerologObject implements zerolog.LogObjectMarshaler.
+func (a AuthKey) MarshalZerologObject(e *zerolog.Event) {
+	e.Str("id", hex.EncodeToString(a.ID[:]))
 }

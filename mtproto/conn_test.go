@@ -11,9 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"go.uber.org/zap"
-
 	"github.com/gotd/td/bin"
 	"github.com/gotd/td/crypto"
 	"github.com/gotd/td/mt"
@@ -21,6 +18,8 @@ import (
 	"github.com/gotd/td/rpc"
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/tmap"
+	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/assert"
 )
 
 type testHandler func(msgID int64, seqNo int32, body bin.Encoder) (bin.Encoder, error)
@@ -42,9 +41,9 @@ func newTestClient(h testHandler, opts ...testClientOption) *Conn {
 		}
 		return nil
 	}, rpc.Options{})
-
+	nop := zerolog.Nop()
 	opt := Options{
-		Logger:    zap.NewNop(),
+		Logger:    &nop,
 		Random:    rand.New(rand.NewSource(1)),
 		Key:       crypto.Key{}.WithID(),
 		MessageID: proto.NewMessageIDGen(time.Now),

@@ -1,7 +1,7 @@
 package peers
 
 import (
-	"go.uber.org/zap"
+	"github.com/rs/zerolog"
 	"golang.org/x/sync/singleflight"
 
 	"github.com/gotd/td/constant"
@@ -12,7 +12,7 @@ import (
 type Options struct {
 	Storage Storage
 	Cache   Cache
-	Logger  *zap.Logger
+	Logger  *zerolog.Logger
 }
 
 func (o *Options) setDefaults() {
@@ -23,7 +23,8 @@ func (o *Options) setDefaults() {
 		o.Cache = NoopCache{}
 	}
 	if o.Logger == nil {
-		o.Logger = zap.NewNop()
+		nop := zerolog.Nop()
+		o.Logger = &nop
 	}
 }
 

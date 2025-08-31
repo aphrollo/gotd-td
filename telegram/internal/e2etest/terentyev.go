@@ -5,12 +5,11 @@ import (
 	"time"
 
 	"github.com/go-faster/errors"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
 	"github.com/gotd/td/telegram/message"
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/tgerr"
+	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/require"
 )
 
 // User is a simple user bot.
@@ -19,17 +18,18 @@ type User struct {
 	text     []string
 	username string
 
-	logger  *zap.Logger
+	logger  *zerolog.Logger
 	message chan string
 }
 
 // NewUser creates new User bot.
 func NewUser(suite *Suite, text []string, username string) User {
+	lg := suite.logger.With().Str("logger", "terentyev").Logger()
 	return User{
 		suite:    suite,
 		text:     text,
 		username: username,
-		logger:   suite.logger.Named("terentyev"),
+		logger:   &lg,
 		message:  make(chan string, 1),
 	}
 }
@@ -40,8 +40,11 @@ func (u User) messageHandler(ctx context.Context, entities tg.Entities, update *
 	}
 
 	if m, ok := update.Message.(interface{ GetMessage() string }); ok {
-		u.logger.Named("dispatcher").
-			Info("Got new message update", zap.String("message", m.GetMessage()))
+		logger := u.logger.With().
+			Str("logger", "dispatcher").
+			Str("message", m.GetMessage()).
+			Logger()
+		logger.Info().Msg("Got new message update")
 	}
 
 	msg, ok := update.Message.(*tg.Message)

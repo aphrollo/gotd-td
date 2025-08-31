@@ -2,9 +2,10 @@ package peers_test
 
 import (
 	"context"
+	"os"
 
 	"github.com/go-faster/errors"
-	"go.uber.org/zap"
+	"github.com/rs/zerolog"
 
 	"github.com/gotd/td/telegram"
 	"github.com/gotd/td/telegram/peers"
@@ -13,14 +14,16 @@ import (
 )
 
 func ExampleManager() {
-	logger := zap.NewExample()
+	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout})
+	clg := logger.With().Str("logger", "client").Logger()
+	glg := logger.With().Str("logger", "gaps").Logger()
 
 	var (
 		dispatcher = tg.NewUpdateDispatcher()
 		h          telegram.UpdateHandler
 	)
 	client, err := telegram.ClientFromEnvironment(telegram.Options{
-		Logger: logger.Named("client"),
+		Logger: &clg,
 		UpdateHandler: telegram.UpdateHandlerFunc(func(ctx context.Context, u tg.UpdatesClass) error {
 			return h.Handle(ctx, u)
 		}),
@@ -29,12 +32,12 @@ func ExampleManager() {
 		panic(err)
 	}
 	peerManager := peers.Options{
-		Logger: logger,
+		Logger: &logger,
 	}.Build(client.API())
 	gaps := updates.New(updates.Config{
 		Handler:      dispatcher,
 		AccessHasher: peerManager,
-		Logger:       logger.Named("gaps"),
+		Logger:       &glg,
 	})
 	h = peerManager.UpdateHook(gaps)
 

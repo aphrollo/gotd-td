@@ -4,8 +4,6 @@ import (
 	"context"
 
 	"github.com/go-faster/errors"
-	"go.uber.org/zap"
-
 	"github.com/gotd/td/bin"
 	"github.com/gotd/td/mt"
 	"github.com/gotd/td/rpc"
@@ -23,22 +21,21 @@ func (c *Conn) Invoke(ctx context.Context, input bin.Encoder, output bin.Decoder
 		Output: output,
 	}
 
-	log := c.log.With(
-		zap.Int64("msg_id", req.MsgID),
-	)
-	log.Debug("Invoke start")
-	defer log.Debug("Invoke end")
+	l := c.log.With().
+		Int64("msg_id", req.MsgID).
+		Logger()
+	l.Debug().Msg("Invoke start")
+	defer l.Debug().Msg("Invoke end")
 
 	if err := c.rpc.Do(ctx, req); err != nil {
 		var badMsgErr *badMessageError
 		if errors.As(err, &badMsgErr) && badMsgErr.Code == codeIncorrectServerSalt {
-			// Should retry with new salt.
-			c.log.Debug("Setting server salt")
-			// Store salt from server.
+			c.log.Debug().Msg("Setting server salt")
 			c.storeSalt(badMsgErr.NewSalt)
-			// Reset saved salts to fetch new.
 			c.salts.Reset()
-			c.log.Info("Retrying request after basMsgErr", zap.Int64("msg_id", req.MsgID))
+			c.log.Info().
+				Int64("msg_id", req.MsgID).
+				Msg("Retrying request after badMsgErr")
 			return c.rpc.Do(ctx, req)
 		}
 		return errors.Wrap(err, "rpcDoRequest")

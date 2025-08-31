@@ -3,12 +3,11 @@ package cluster
 import (
 	"io"
 
-	"go.uber.org/zap"
-
 	"github.com/gotd/td/crypto"
 	"github.com/gotd/td/telegram/dcs"
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/transport"
+	"github.com/rs/zerolog"
 )
 
 // Options of Cluster.
@@ -18,8 +17,8 @@ type Options struct {
 	// Random is random source. Used to generate RSA keys.
 	// Defaults to rand.Reader.
 	Random io.Reader
-	// Logger is instance of zap.Logger. No logs by default.
-	Logger *zap.Logger
+	// Logger is instance of zerolog.Logger. No logs by default.
+	Logger *zerolog.Logger
 	// Codec constructor.
 	// Defaults to nil (underlying transport server detects protocol automatically).
 	Protocol dcs.Protocol
@@ -35,7 +34,8 @@ func (opt *Options) setDefaults() {
 		opt.Random = crypto.DefaultRand()
 	}
 	if opt.Logger == nil {
-		opt.Logger = zap.NewNop()
+		nop := zerolog.Nop()
+		opt.Logger = &nop
 	}
 	if opt.Protocol == nil {
 		opt.Protocol = transport.Intermediate

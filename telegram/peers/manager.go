@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"github.com/go-faster/errors"
-	"go.uber.org/zap"
+	"github.com/rs/zerolog"
 	"golang.org/x/sync/singleflight"
 
 	"github.com/gotd/td/tg"
@@ -27,7 +27,7 @@ type Manager struct {
 	needUpdateFull peerIDSet
 	needUpdateMux  sync.Mutex // guards needUpdate, needUpdateFull
 
-	logger *zap.Logger
+	logger *zerolog.Logger
 	sg     singleflight.Group
 }
 

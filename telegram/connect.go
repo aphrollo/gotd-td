@@ -6,32 +6,25 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/go-faster/errors"
-	"go.uber.org/multierr"
-	"go.uber.org/zap"
-
 	"github.com/gotd/td/exchange"
 	"github.com/gotd/td/tdsync"
 	"github.com/gotd/td/telegram/auth"
 	"github.com/gotd/td/tgerr"
+	"go.uber.org/multierr"
 )
 
 func (c *Client) runUntilRestart(ctx context.Context) error {
 	g := tdsync.NewCancellableGroup(ctx)
 	g.Go(c.conn.Run)
 
-	// If we don't need updates, so there is no reason to subscribe for it.
 	if !c.noUpdatesMode {
 		g.Go(func(ctx context.Context) error {
-			// Call method which requires authorization, to subscribe for updates.
-			// See https://core.telegram.org/api/updates#subscribing-to-updates.
 			self, err := c.Self(ctx)
 			if err != nil {
-				// Ignore unauthorized errors.
 				if !auth.IsUnauthorized(err) {
-					c.log.Warn("Got error on self", zap.Error(err))
+					c.log.Warn().Err(err).Msg("Got error on self")
 				}
 				if h := c.onSelfError; h != nil {
-					// Help with https://github.com/gotd/td/issues/1458.
 					if err := h(ctx, err); err != nil {
 						return errors.Wrap(err, "onSelfError")
 					}
@@ -39,7 +32,7 @@ func (c *Client) runUntilRestart(ctx context.Context) error {
 				return nil
 			}
 
-			c.log.Info("Got self", zap.String("username", self.Username))
+			c.log.Info().Str("username", self.Username).Msg("Got self")
 			return nil
 		})
 	}
@@ -49,10 +42,8 @@ func (c *Client) runUntilRestart(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-c.restart:
-			c.log.Debug("Restart triggered")
-			// Should call cancel() to cancel group.
+			c.log.Debug().Msg("Restart triggered")
 			g.Cancel()
-
 			return nil
 		}
 	})
@@ -73,10 +64,7 @@ func (c *Client) isPermanentError(err error) bool {
 	}
 	return false
 }
-
 func (c *Client) reconnectUntilClosed(ctx context.Context) error {
-	// Note that we currently have no timeout on connection, so this is
-	// potentially eternal.
 	b := tdsync.SyncBackoff(backoff.WithContext(c.newConnBackoff(), ctx))
 	c.connBackoff.Store(&b)
 
@@ -87,10 +75,12 @@ func (c *Client) reconnectUntilClosed(ctx context.Context) error {
 			}
 			return err
 		}
-
 		return nil
 	}, b, func(err error, timeout time.Duration) {
-		c.log.Info("Restarting connection", zap.Error(err), zap.Duration("backoff", timeout))
+		c.log.Info().
+			Err(err).
+			Dur("backoff", timeout).
+			Msg("Restarting connection")
 
 		c.connMux.Lock()
 		c.conn = c.createPrimaryConn(nil)
@@ -99,11 +89,10 @@ func (c *Client) reconnectUntilClosed(ctx context.Context) error {
 }
 
 func (c *Client) onReady() {
-	c.log.Debug("Ready")
+	c.log.Debug().Msg("Ready")
 	c.ready.Signal()
 
 	if b := c.connBackoff.Load(); b != nil {
-		// Reconnect faster next time.
 		(*b).Reset()
 	}
 }
@@ -130,13 +119,10 @@ func (c *Client) Run(ctx context.Context, f func(ctx context.Context) error) (er
 		}
 	}
 
-	// Setting up client context for background operations like updates
-	// handling or pool creation.
 	c.ctx, c.cancel = context.WithCancel(ctx)
 
-	c.log.Info("Starting")
-	defer c.log.Info("Closed")
-	// Cancel client on exit.
+	c.log.Info().Msg("Starting")
+	defer c.log.Info().Msg("Closed")
 	defer c.cancel()
 	defer func() {
 		c.subConnsMux.Lock()
@@ -173,9 +159,7 @@ func (c *Client) Run(ctx context.Context, f func(ctx context.Context) error) (er
 			if err := f(ctx); err != nil {
 				return errors.Wrap(err, "callback")
 			}
-			// Should call cancel() to cancel ctx.
-			// This will terminate c.conn.Run().
-			c.log.Debug("Callback returned, stopping")
+			c.log.Debug().Msg("Callback returned, stopping")
 			g.Cancel()
 			return nil
 		}

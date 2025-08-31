@@ -4,8 +4,6 @@ import (
 	"fmt"
 
 	"github.com/go-faster/errors"
-	"go.uber.org/zap"
-
 	"github.com/gotd/td/bin"
 	"github.com/gotd/td/telegram/internal/upconv"
 	"github.com/gotd/td/tg"
@@ -40,7 +38,9 @@ func (c *Client) processUpdates(updates tg.UpdatesClass) error {
 	case *tg.UpdatesTooLong:
 		return c.updateHandler.Handle(c.ctx, u)
 	default:
-		c.log.Warn("Ignoring update", zap.String("update_type", fmt.Sprintf("%T", u)))
+		c.log.Warn().
+			Str("update_type", fmt.Sprintf("%T", u)).
+			Msg("Ignoring update")
 	}
 	return nil
 }

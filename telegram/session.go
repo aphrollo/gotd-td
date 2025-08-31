@@ -5,8 +5,6 @@ import (
 	"fmt"
 
 	"github.com/go-faster/errors"
-	"go.uber.org/zap"
-
 	"github.com/gotd/td/crypto"
 	"github.com/gotd/td/mtproto"
 	"github.com/gotd/td/pool"
@@ -27,13 +25,11 @@ func (c *Client) restoreConnection(ctx context.Context) error {
 		return errors.Wrap(err, "load")
 	}
 
-	// If file does not contain DC ID, so we use DC from options.
 	prev := c.session.Load()
 	if data.DC == 0 {
 		data.DC = prev.DC
 	}
 
-	// Restoring persisted auth key.
 	var key crypto.AuthKey
 	copy(key.Value[:], data.AuthKey)
 	copy(key.ID[:], data.AuthKeyID)
@@ -42,11 +38,10 @@ func (c *Client) restoreConnection(ctx context.Context) error {
 		return errors.New("corrupted key")
 	}
 
-	// Re-initializing connection from persisted state.
-	c.log.Info("Connection restored from state",
-		zap.String("addr", data.Addr),
-		zap.String("key_id", fmt.Sprintf("%x", data.AuthKeyID)),
-	)
+	c.log.Info().
+		Str("addr", data.Addr).
+		Str("key_id", fmt.Sprintf("%x", data.AuthKeyID)).
+		Msg("Connection restored from state")
 
 	c.connMux.Lock()
 	c.session.Store(pool.Session{
@@ -67,7 +62,6 @@ func (c *Client) saveSession(cfg tg.Config, s mtproto.Session) error {
 
 	data, err := c.storage.Load(c.ctx)
 	if errors.Is(err, session.ErrNotFound) {
-		// Initializing new state.
 		err = nil
 		data = &session.Data{}
 	}
@@ -75,7 +69,6 @@ func (c *Client) saveSession(cfg tg.Config, s mtproto.Session) error {
 		return errors.Wrap(err, "load")
 	}
 
-	// Updating previous data.
 	data.Config = session.ConfigFromTG(cfg)
 	data.AuthKey = s.Key.Value[:]
 	data.AuthKeyID = s.Key.ID[:]
@@ -86,9 +79,9 @@ func (c *Client) saveSession(cfg tg.Config, s mtproto.Session) error {
 		return errors.Wrap(err, "save")
 	}
 
-	c.log.Debug("Data saved",
-		zap.String("key_id", fmt.Sprintf("%x", data.AuthKeyID)),
-	)
+	c.log.Debug().
+		Str("key_id", fmt.Sprintf("%x", data.AuthKeyID)).
+		Msg("Data saved")
 	return nil
 }
 

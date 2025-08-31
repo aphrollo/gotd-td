@@ -1,7 +1,6 @@
 package updates
 
 import (
-	"go.uber.org/zap"
 	"golang.org/x/net/context"
 
 	"github.com/gotd/td/tg"
@@ -22,24 +21,27 @@ func (s *internalState) saveChannelHashes(ctx context.Context, chats []tg.ChatCl
 				if _, ok = s.channels[c.ID]; ok {
 					continue
 				}
-				s.log.Debug("New channel access hash",
-					zap.Int64("channel_id", c.ID),
-					zap.String("title", c.Title),
-				)
+				s.log.Debug().
+					Int64("channel_id", c.ID).
+					Str("title", c.Title).
+					Msg("New channel access hash")
+
 				if err := s.hasher.SetChannelAccessHash(ctx, s.selfID, c.ID, hash); err != nil {
-					s.log.Error("SetChannelState error", zap.Error(err))
+					s.log.Error().Err(err).Msg("SetChannelState error")
+
 				}
 			}
 		case *tg.ChannelForbidden:
 			if _, ok := s.channels[c.ID]; ok {
 				continue
 			}
-			s.log.Debug("New channel access hash",
-				zap.Int64("channel_id", c.ID),
-				zap.String("title", c.Title),
-			)
+			s.log.Debug().
+				Int64("channel_id", c.ID).
+				Str("title", c.Title).
+				Msg("New channel access hash")
+
 			if err := s.hasher.SetChannelAccessHash(ctx, s.selfID, c.ID, c.AccessHash); err != nil {
-				s.log.Error("SetChannelState error", zap.Error(err))
+				s.log.Error().Err(err).Msg("SetChannelState error")
 			}
 		}
 	}
@@ -55,7 +57,7 @@ func (s *internalState) restoreAccessHash(ctx context.Context, channelID int64, 
 		Date: date,
 	})
 	if err != nil {
-		s.log.Error("UpdatesGetDifference error", zap.Error(err))
+		s.log.Error().Err(err).Msg("UpdatesGetDifference error")
 		return 0, false
 	}
 

@@ -6,21 +6,18 @@ import (
 	"os"
 	"os/signal"
 
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-
 	"github.com/gotd/td/telegram"
 	"github.com/gotd/td/telegram/message"
 	"github.com/gotd/td/tg"
+	"github.com/rs/zerolog"
 )
 
 func run(ctx context.Context) error {
-	logger, _ := zap.NewDevelopment(zap.IncreaseLevel(zapcore.DebugLevel))
-	defer func() { _ = logger.Sync() }()
+	logger := zerolog.New(os.Stdout).Level(zerolog.DebugLevel)
 
 	dispatcher := tg.NewUpdateDispatcher()
 	return telegram.BotFromEnvironment(ctx, telegram.Options{
-		Logger:        logger,
+		Logger:        &logger,
 		UpdateHandler: dispatcher,
 	}, func(ctx context.Context, client *telegram.Client) error {
 		sender := message.NewSender(tg.NewClient(client))

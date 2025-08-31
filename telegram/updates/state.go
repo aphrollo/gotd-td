@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/go-faster/errors"
+	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/gotd/td/exchange"
@@ -48,7 +48,7 @@ type internalState struct {
 
 	// Immutable fields.
 	client    API
-	log       *zap.Logger
+	log       *zerolog.Logger
 	handler   telegram.UpdateHandler
 	onTooLong func(channelID int64)
 	storage   StateStorage
@@ -66,7 +66,7 @@ type stateConfig struct {
 		AccessHash int64
 	}
 	RawClient        API
-	Logger           *zap.Logger
+	Logger           *zerolog.Logger
 	Tracer           trace.Tracer
 	Handler          telegram.UpdateHandler
 	OnChannelTooLong func(channelID int64)
@@ -98,22 +98,25 @@ func newState(ctx context.Context, cfg stateConfig) *internalState {
 		wg:        cfg.WorkGroup,
 		tracer:    cfg.Tracer,
 	}
+	plg := s.log.With().Str("logger", "pts").Logger()
+	qlg := s.log.With().Str("logger", "qts").Logger()
+	slg := s.log.With().Str("logger", "seq").Logger()
 	s.pts = newSequenceBox(sequenceConfig{
 		InitialState: cfg.State.Pts,
 		Apply:        s.applyPts,
-		Logger:       s.log.Named("pts"),
+		Logger:       &plg,
 		Tracer:       s.tracer,
 	})
 	s.qts = newSequenceBox(sequenceConfig{
 		InitialState: cfg.State.Qts,
 		Apply:        s.applyQts,
-		Logger:       s.log.Named("qts"),
+		Logger:       &qlg,
 		Tracer:       s.tracer,
 	})
 	s.seq = newSequenceBox(sequenceConfig{
 		InitialState: cfg.State.Seq,
 		Apply:        s.applySeq,
-		Logger:       s.log.Named("seq"),
+		Logger:       &slg,
 	})
 
 	for id, info := range cfg.Channels {
@@ -162,8 +165,8 @@ func (s *internalState) Run(ctx context.Context) error {
 	if s.log == nil {
 		return errors.New("invalid: nil logger")
 	}
-	s.log.Debug("Starting updates handler")
-	defer s.log.Debug("Updates handler stopped")
+	s.log.Debug().Msg("Starting updates handler")
+	defer s.log.Debug().Msg("Updates handler stopped")
 	s.getDifferenceLogger(ctx)
 
 	for {
@@ -176,7 +179,7 @@ func (s *internalState) Run(ctx context.Context) error {
 		case u := <-s.externalQueue:
 			ctx := trace.ContextWithSpanContext(ctx, u.span)
 			if err := s.handleUpdates(ctx, u.update); err != nil {
-				s.log.Error("Handle updates error", zap.Error(err))
+				s.log.Error().Err(err).Msg("Handle updates error")
 				if isFatalError(err) {
 					return errors.Wrap(err, "fatal error")
 				}
@@ -184,22 +187,22 @@ func (s *internalState) Run(ctx context.Context) error {
 		case u := <-s.internalQueue:
 			ctx := trace.ContextWithSpanContext(ctx, u.span)
 			if err := s.handleUpdates(ctx, u.update); err != nil {
-				s.log.Error("Handle updates error", zap.Error(err))
+				s.log.Error().Err(err).Msg("Handle updates error")
 				if isFatalError(err) {
 					return errors.Wrap(err, "fatal error")
 				}
 			}
 		case <-s.pts.gapTimeout.C:
-			s.log.Debug("Pts gap timeout")
+			s.log.Debug().Msg("Pts gap timeout")
 			s.getDifferenceLogger(ctx)
 		case <-s.qts.gapTimeout.C:
-			s.log.Debug("Qts gap timeout")
+			s.log.Debug().Msg("Qts gap timeout")
 			s.getDifferenceLogger(ctx)
 		case <-s.seq.gapTimeout.C:
-			s.log.Debug("Seq gap timeout")
+			s.log.Debug().Msg("Seq gap timeout")
 			s.getDifferenceLogger(ctx)
 		case <-s.idleTimeout.C:
-			s.log.Debug("Idle timeout")
+			s.log.Debug().Msg("Idle timeout")
 			s.getDifferenceLogger(ctx)
 		}
 	}
@@ -248,7 +251,7 @@ func (s *internalState) handleSeq(ctx context.Context, u *tg.UpdatesCombined) er
 	defer span.End()
 
 	if err := validateSeq(u.Seq, u.SeqStart); err != nil {
-		s.log.Error("Seq validation failed", zap.Error(err), zap.Any("update", u))
+		s.log.Error().Err(err).Any("update", u).Msg("Seq validation failed")
 		return nil
 	}
 
@@ -275,7 +278,7 @@ func (s *internalState) handleSeq(ctx context.Context, u *tg.UpdatesCombined) er
 
 func (s *internalState) handlePts(ctx context.Context, pts, ptsCount int, u tg.UpdateClass, ents entities) error {
 	if err := validatePts(pts, ptsCount); err != nil {
-		s.log.Error("Pts validation failed", zap.Error(err), zap.Any("update", u))
+		s.log.Error().Err(err).Any("update", u).Msg("Pts validation failed")
 		return nil
 	}
 
@@ -289,7 +292,7 @@ func (s *internalState) handlePts(ctx context.Context, pts, ptsCount int, u tg.U
 
 func (s *internalState) handleQts(ctx context.Context, qts int, u tg.UpdateClass, ents entities) error {
 	if err := validateQts(qts); err != nil {
-		s.log.Error("Qts validation failed", zap.Error(err), zap.Any("update", u))
+		s.log.Error().Err(err).Any("update", u).Msg("Qts validation failed")
 		return nil
 	}
 
@@ -303,7 +306,7 @@ func (s *internalState) handleQts(ctx context.Context, qts int, u tg.UpdateClass
 
 func (s *internalState) handleChannel(ctx context.Context, channelID int64, date, pts, ptsCount int, cu channelUpdate) error {
 	if err := validatePts(pts, ptsCount); err != nil {
-		s.log.Error("Pts validation failed", zap.Error(err), zap.Any("update", cu.update))
+		s.log.Error().Err(err).Any("update", cu.update).Msg("Pts validation failed")
 		return nil
 	}
 
@@ -311,7 +314,7 @@ func (s *internalState) handleChannel(ctx context.Context, channelID int64, date
 	if !ok {
 		accessHash, found, err := s.hasher.GetChannelAccessHash(context.Background(), s.selfID, channelID)
 		if err != nil {
-			s.log.Error("GetChannelAccessHash error", zap.Error(err))
+			s.log.Error().Err(err).Msg("GetChannelAccessHash error")
 		}
 
 		if !found {
@@ -325,10 +328,10 @@ func (s *internalState) handleChannel(ctx context.Context, channelID int64, date
 			// Try to get access hash from updates.getDifference.
 			accessHash, found = s.restoreAccessHash(ctx, channelID, date)
 			if !found {
-				s.log.Debug("Failed to recover missing access hash, update ignored",
-					zap.Int64("channel_id", channelID),
-					zap.Any("update", cu.update),
-				)
+				s.log.Debug().
+					Int64("channel_id", channelID).
+					Interface("update", cu.update).
+					Msg("Failed to recover missing access hash, update ignored")
 				return nil
 			}
 		}
@@ -336,13 +339,13 @@ func (s *internalState) handleChannel(ctx context.Context, channelID int64, date
 		localPts, found, err := s.storage.GetChannelPts(ctx, s.selfID, channelID)
 		if err != nil {
 			localPts = pts - ptsCount
-			s.log.Error("GetChannelPts error", zap.Error(err))
+			s.log.Error().Err(err).Msg("GetChannelPts error")
 		}
 
 		if !found {
 			localPts = pts - ptsCount
 			if err := s.storage.SetChannelPts(ctx, s.selfID, channelID, localPts); err != nil {
-				s.log.Error("SetChannelPts error", zap.Error(err))
+				s.log.Error().Err(err).Msg("SetChannelPts error")
 			}
 		}
 
@@ -357,6 +360,10 @@ func (s *internalState) handleChannel(ctx context.Context, channelID int64, date
 }
 
 func (s *internalState) newChannelState(channelID, accessHash int64, initialPts int) *channelState {
+	lg := s.log.With().
+		Str("logger", "channel").
+		Int64("channel_id", channelID).
+		Logger()
 	return newChannelState(channelStateConfig{
 		Out:              s.internalQueue,
 		InitialPts:       initialPts,
@@ -368,7 +375,7 @@ func (s *internalState) newChannelState(channelID, accessHash int64, initialPts 
 		RawClient:        s.client,
 		Handler:          s.handler,
 		OnChannelTooLong: s.onTooLong,
-		Logger:           s.log.Named("channel").With(zap.Int64("channel_id", channelID)),
+		Logger:           &lg,
 		Tracer:           s.tracer,
 	})
 }
@@ -382,11 +389,11 @@ func (s *internalState) getDifference(ctx context.Context) error {
 	s.qts.gaps.Clear()
 	s.seq.gaps.Clear()
 
-	s.log.Debug("Getting difference")
+	s.log.Debug().Msg("Getting difference")
 
 	setState := func(state tg.UpdatesState, reason string) {
 		if err := s.storage.SetState(ctx, s.selfID, State{}.fromRemote(&state)); err != nil {
-			s.log.Warn("SetState error", zap.Error(err))
+			s.log.Warn().Err(err).Msg("SetState error")
 		}
 
 		s.pts.SetState(state.Pts, reason)
@@ -404,7 +411,7 @@ func (s *internalState) getDifference(ctx context.Context) error {
 		return errors.Wrap(err, "get difference")
 	}
 
-	s.log.Debug("Difference received", zap.String("diff", fmt.Sprintf("%T", diff)))
+	s.log.Debug().Str("diff", fmt.Sprintf("%T", diff)).Msg("Difference received")
 
 	switch diff := diff.(type) {
 	case *tg.UpdatesDifference:
@@ -427,7 +434,7 @@ func (s *internalState) getDifference(ctx context.Context) error {
 				Users: diff.Users,
 				Chats: diff.Chats,
 			}); err != nil {
-				s.log.Error("Handle updates error", zap.Error(err))
+				s.log.Error().Err(err).Msg("Handle updates error")
 			}
 		}
 
@@ -437,7 +444,7 @@ func (s *internalState) getDifference(ctx context.Context) error {
 	// No events.
 	case *tg.UpdatesDifferenceEmpty:
 		if err := s.storage.SetDateSeq(ctx, s.selfID, diff.Date, diff.Seq); err != nil {
-			s.log.Warn("SetDateSeq error", zap.Error(err))
+			s.log.Warn().Err(err).Msg("SetDateSeq error")
 		}
 
 		s.date = diff.Date
@@ -453,7 +460,7 @@ func (s *internalState) getDifference(ctx context.Context) error {
 				Chats:   diff.Chats,
 				Date:    diff.IntermediateState.Date,
 			}); err != nil {
-				s.log.Error("Handle updates error", zap.Error(err))
+				s.log.Error().Err(err).Msg("Handle updates error")
 			}
 		}
 
@@ -466,7 +473,7 @@ func (s *internalState) getDifference(ctx context.Context) error {
 				Users: diff.Users,
 				Chats: diff.Chats,
 			}); err != nil {
-				s.log.Error("Handle updates error", zap.Error(err))
+				s.log.Error().Err(err).Msg("Handle updates error")
 			}
 		}
 
@@ -476,7 +483,7 @@ func (s *internalState) getDifference(ctx context.Context) error {
 	// The difference is too long, and the specified internalState must be used to refetch updates.
 	case *tg.UpdatesDifferenceTooLong:
 		if err := s.storage.SetPts(ctx, s.selfID, diff.Pts); err != nil {
-			s.log.Error("SetPts error", zap.Error(err))
+			s.log.Error().Err(err).Msg("SetPts error")
 		}
 		s.pts.SetState(diff.Pts, "updates.differenceTooLong")
 		return s.getDifference(ctx)
@@ -488,7 +495,7 @@ func (s *internalState) getDifference(ctx context.Context) error {
 
 func (s *internalState) getDifferenceLogger(ctx context.Context) {
 	if err := s.getDifference(ctx); err != nil {
-		s.log.Error("get difference error", zap.Error(err))
+		s.log.Error().Err(err).Msg("get difference error")
 	}
 }
 

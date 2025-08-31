@@ -7,13 +7,12 @@ import (
 	"testing"
 	"testing/iotest"
 
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
 	"github.com/gotd/td/bin"
 	"github.com/gotd/td/clock"
 	"github.com/gotd/td/crypto"
 	"github.com/gotd/td/transport"
+	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/require"
 )
 
 type closeConn struct {
@@ -38,6 +37,7 @@ func TestConn_connect(t *testing.T) {
 		t.Run("Exchange", func(t *testing.T) {
 			a := require.New(t)
 
+			nop := zerolog.Nop()
 			closeMe := &closeConn{}
 			c := Conn{
 				dialer: func(ctx context.Context) (transport.Conn, error) {
@@ -45,7 +45,7 @@ func TestConn_connect(t *testing.T) {
 				},
 				clock: clock.System,
 				rand:  rand.Reader,
-				log:   zap.NewNop(),
+				log:   &nop,
 			}
 
 			a.Error(c.connect(context.Background()))
@@ -54,6 +54,7 @@ func TestConn_connect(t *testing.T) {
 		t.Run("SessionID", func(t *testing.T) {
 			a := require.New(t)
 
+			nop := zerolog.Nop()
 			closeMe := &closeConn{}
 			c := Conn{
 				dialer: func(ctx context.Context) (transport.Conn, error) {
@@ -64,7 +65,7 @@ func TestConn_connect(t *testing.T) {
 					ID: [8]byte{1}, // Skip exchange.
 				},
 				rand: iotest.ErrReader(io.EOF),
-				log:  zap.NewNop(),
+				log:  &nop,
 			}
 
 			a.Error(c.connect(context.Background()))

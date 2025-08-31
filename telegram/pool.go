@@ -4,8 +4,6 @@ import (
 	"context"
 
 	"github.com/go-faster/errors"
-	"go.uber.org/zap"
-
 	"github.com/gotd/td/mtproto"
 	"github.com/gotd/td/pool"
 	"github.com/gotd/td/telegram/auth"
@@ -28,8 +26,13 @@ func (c *Client) createPool(dc int, max int64, creator func() pool.Conn) (*pool.
 	default:
 	}
 
+	l := c.log.With().
+		Str("logger", "pool").
+		Int("dc_id", dc).
+		Logger()
+
 	p := pool.NewDC(c.ctx, dc, creator, pool.DCOptions{
-		Logger:             c.log.Named("pool").With(zap.Int("dc_id", dc)),
+		Logger:             &l,
 		MaxOpenConnections: max,
 	})
 
@@ -58,11 +61,12 @@ func (c *Client) dc(ctx context.Context, dcID int, max int64, dialer mtproto.Dia
 	if len(dcList) < 1 {
 		return nil, errors.Errorf("unknown DC %d", dcID)
 	}
-	c.log.Debug("Creating pool",
-		zap.Int("dc_id", dcID),
-		zap.Int64("max", max),
-		zap.Int("candidates", len(dcList)),
-	)
+
+	c.log.Debug().
+		Int("dc_id", dcID).
+		Int64("max", max).
+		Int("candidates", len(dcList)).
+		Msg("Creating pool")
 
 	opts := c.opts
 	p, err := c.createPool(dcID, max, func() pool.Conn {
@@ -77,10 +81,13 @@ func (c *Client) dc(ctx context.Context, dcID int, max int64, dialer mtproto.Dia
 		c.sessionsMux.Unlock()
 
 		options, _ := session.Options(opts)
-		options.Logger = c.log.Named("conn").With(
-			zap.Int64("conn_id", id),
-			zap.Int("dc_id", dcID),
-		)
+		l := c.log.With().
+			Str("logger", "conn").
+			Int64("conn_id", id).
+			Int("dc_id", dcID).
+			Logger()
+		options.Logger = &l
+
 		return c.create(
 			dialer, manager.ConnModeData, c.appID,
 			options, manager.ConnOptions{
@@ -97,12 +104,10 @@ func (c *Client) dc(ctx context.Context, dcID int, max int64, dialer mtproto.Dia
 
 	_, err = c.transfer(ctx, tg.NewClient(p), dcID)
 	if err != nil {
-		// Ignore case then we are not authorized.
 		if auth.IsUnauthorized(err) {
 			return p, nil
 		}
 
-		// Kill pool if we got error.
 		_ = p.Close()
 		return nil, errors.Wrap(err, "transfer")
 	}

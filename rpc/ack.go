@@ -1,9 +1,5 @@
 package rpc
 
-import (
-	"go.uber.org/zap"
-)
-
 // NotifyAcks notifies engine about received acknowledgements.
 func (e *Engine) NotifyAcks(ids []int64) {
 	e.mux.Lock()
@@ -12,7 +8,7 @@ func (e *Engine) NotifyAcks(ids []int64) {
 	for _, id := range ids {
 		ch, ok := e.ack[id]
 		if !ok {
-			e.log.Debug("Acknowledge callback not set", zap.Int64("msg_id", id))
+			e.log.Debug().Int64("msg_id", id).Msg("Acknowledge callback not set")
 			continue
 		}
 
@@ -25,13 +21,13 @@ func (e *Engine) waitAck(id int64) chan struct{} {
 	e.mux.Lock()
 	defer e.mux.Unlock()
 
-	log := e.log.With(zap.Int64("ack_id", id))
+	log := e.log.With().Int64("ack_id", id).Logger()
 	if c, found := e.ack[id]; found {
-		log.Warn("Ack already registered")
+		log.Warn().Msg("Ack already registered")
 		return c
 	}
 
-	log.Debug("Waiting for acknowledge")
+	log.Debug().Msg("Waiting for acknowledge")
 	c := make(chan struct{})
 	e.ack[id] = c
 	return c

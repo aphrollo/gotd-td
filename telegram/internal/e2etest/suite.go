@@ -7,12 +7,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
 	"github.com/gotd/td/telegram"
 	"github.com/gotd/td/telegram/dcs"
 	"github.com/gotd/td/tgacc"
+	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/require"
 )
 
 // Suite is struct which contains external E2E test parameters.
@@ -21,7 +20,7 @@ type Suite struct {
 	appID   int
 	appHash string
 	dc      int
-	logger  *zap.Logger
+	logger  *zerolog.Logger
 	manager *tgacc.TestAccountManager
 	closers []func() error
 
@@ -73,7 +72,7 @@ func NewSuite(t *testing.T, config TestOptions) *Suite {
 }
 
 // Client creates new *telegram.Client using this suite.
-func (s *Suite) Client(logger *zap.Logger, handler telegram.UpdateHandler) *telegram.Client {
+func (s *Suite) Client(logger *zerolog.Logger, handler telegram.UpdateHandler) *telegram.Client {
 	return telegram.NewClient(s.appID, s.appHash, telegram.Options{
 		DC:            s.dc,
 		DCList:        dcs.Test(),

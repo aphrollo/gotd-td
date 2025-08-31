@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zaptest"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/gotd/td/telegram/updates"
@@ -84,7 +83,7 @@ func testManager(t *testing.T, f func(s *server, storage updates.StateStorage) c
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var (
-		log     = zaptest.NewLogger(t)
+		log     = zerolog.New(zerolog.NewTestWriter(t))
 		s       = newServer()
 		h       = newHandler()
 		storage = newMemStorage()
@@ -105,10 +104,13 @@ func testManager(t *testing.T, f func(s *server, storage updates.StateStorage) c
 		require.NoError(t, storage.SetChannelPts(ctx, uid, c.ChannelID, 0))
 		require.NoError(t, hasher.SetChannelAccessHash(ctx, uid, c.ChannelID, c.ChannelID*2))
 	}
+	ulog := zerolog.New(zerolog.NewTestWriter(t)).With().
+		Str("logger", "gaps").
+		Logger()
 
 	e := updates.New(updates.Config{
 		Handler:      h,
-		Logger:       log.Named("gaps"),
+		Logger:       ulog,
 		Storage:      storage,
 		AccessHasher: hasher,
 	})

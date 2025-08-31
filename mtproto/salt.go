@@ -5,20 +5,21 @@ import (
 	"time"
 
 	"github.com/go-faster/errors"
-	"go.uber.org/zap"
 
 	"github.com/gotd/td/mt"
 )
 
 func (c *Conn) storeSalt(salt int64) {
 	c.sessionMux.Lock()
-	// Copy to log.
 	oldSalt := c.salt
 	c.salt = salt
 	c.sessionMux.Unlock()
 
 	if salt != oldSalt {
-		c.log.Info("Salt updated", zap.Int64("old", oldSalt), zap.Int64("new", salt))
+		c.log.Info().
+			Int64("old", oldSalt).
+			Int64("new", salt).
+			Msg("Salt updated")
 	}
 }
 

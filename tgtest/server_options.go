@@ -4,8 +4,6 @@ import (
 	"io"
 	"time"
 
-	"go.uber.org/zap"
-
 	"github.com/gotd/td/clock"
 	"github.com/gotd/td/crypto"
 	"github.com/gotd/td/mt"
@@ -14,6 +12,7 @@ import (
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/tmap"
 	"github.com/gotd/td/transport"
+	"github.com/rs/zerolog"
 )
 
 // ServerOptions of Server.
@@ -22,8 +21,8 @@ type ServerOptions struct {
 	DC int
 	// Random is random source. Defaults to rand.Reader.
 	Random io.Reader
-	// Logger is instance of zap.Logger. No logs by default.
-	Logger *zap.Logger
+	// Logger is instance of zerolog.Logger. No logs by default.
+	Logger *zerolog.Logger
 	// Codec constructor.
 	// Defaults to nil (underlying transport server detects protocol automatically).
 	Codec func() transport.Codec
@@ -48,7 +47,8 @@ func (opt *ServerOptions) setDefaults() {
 		opt.Random = crypto.DefaultRand()
 	}
 	if opt.Logger == nil {
-		opt.Logger = zap.NewNop()
+		nop := zerolog.Nop()
+		opt.Logger = &nop
 	}
 
 	// Ignore opt.Codec, will be handled by transport.NewCustomServer.

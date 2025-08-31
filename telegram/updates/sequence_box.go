@@ -5,8 +5,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/zap"
 )
 
 type sequenceBox struct {
@@ -16,14 +16,14 @@ type sequenceBox struct {
 	pending    []update
 
 	apply  func(ctx context.Context, state int, updates []update) error
-	log    *zap.Logger
+	log    *zerolog.Logger
 	tracer trace.Tracer
 }
 
 type sequenceConfig struct {
 	InitialState int
 	Apply        func(ctx context.Context, state int, updates []update) error
-	Logger       *zap.Logger
+	Logger       *zerolog.Logger
 	Tracer       trace.Tracer
 }
 
@@ -32,13 +32,14 @@ func newSequenceBox(cfg sequenceConfig) *sequenceBox {
 		panic("Apply func nil")
 	}
 	if cfg.Logger == nil {
-		cfg.Logger = zap.NewNop()
+		nop := zerolog.Nop()
+		cfg.Logger = &nop
 	}
 	if cfg.Tracer == nil {
 		cfg.Tracer = trace.NewNoopTracerProvider().Tracer("")
 	}
 
-	cfg.Logger.Debug("Initialized", zap.Int("internalState", cfg.InitialState))
+	cfg.Logger.Debug().Int("internalState", cfg.InitialState).Msg("Initialized")
 
 	t := time.NewTimer(fastgapTimeout)
 	_ = t.Stop()
@@ -55,23 +56,27 @@ func (s *sequenceBox) Handle(ctx context.Context, u update) error {
 	ctx, span := s.tracer.Start(ctx, "sequenceBox.Handle")
 	defer span.End()
 
-	log := s.log.With(zap.Int("upd_from", u.start()), zap.Int("upd_to", u.end()))
+	log := s.log.With().
+		Int("upd_from", u.start()).
+		Int("upd_to", u.end()).
+		Logger()
+
 	if checkGap(s.state, u.State, u.Count) == gapIgnore {
-		log.Debug("Outdated update, skipping", zap.Int("internalState", s.state))
+		log.Debug().Int("internalState", s.state).Msg("Outdated update, skipping")
 		return nil
 	}
 
 	if s.gaps.Has() {
 		s.pending = append(s.pending, u)
 		if accepted := s.gaps.Consume(u); !accepted {
-			log.Debug("Out of gap range, postponed", zap.Array("gaps", s.gaps))
+			log.Debug().Msg("Out of gap range, postponed")
 			return nil
 		}
 
-		log.Debug("Gap accepted", zap.Array("gaps", s.gaps))
+		log.Debug().Msg("Gap accepted")
 		if !s.gaps.Has() {
 			_ = s.gapTimeout.Stop()
-			s.log.Debug("Gap was resolved by waiting")
+			s.log.Debug().Msg("Gap was resolved by waiting")
 			return s.applyPending(ctx)
 		}
 		return nil
@@ -87,7 +92,7 @@ func (s *sequenceBox) Handle(ctx context.Context, u update) error {
 			return err
 		}
 
-		log.Debug("Accepted")
+		log.Debug().Msg("Accepted")
 		s.setState(u.State, "update")
 		return nil
 	case gapRefetch:
@@ -100,12 +105,12 @@ func (s *sequenceBox) Handle(ctx context.Context, u update) error {
 		}
 
 		if !s.gaps.Has() {
-			log.Debug("Gap was resolved by pending updates")
+			log.Debug().Msg("Gap was resolved by pending updates")
 			return s.applyPending(ctx)
 		}
 
 		_ = s.gapTimeout.Reset(fastgapTimeout)
-		s.log.Debug("Gap detected", zap.Array("gap", s.gaps))
+		s.log.Debug().Msg("Gap detected")
 		return nil
 	default:
 		panic("unreachable")
@@ -154,7 +159,7 @@ loop:
 	}
 	s.pending = s.pending[:trim]
 	if len(accepted) == 0 {
-		s.log.Warn("Empty buffer", zap.Any("pending", s.pending), zap.Int("internalState", s.state))
+		s.log.Warn().Any("pending", s.pending).Int("internalState", s.state).Msg("Empty buffer")
 		return nil
 	}
 
@@ -162,11 +167,11 @@ loop:
 		return err
 	}
 
-	s.log.Debug("Pending updates applied",
-		zap.Int("prev_state", s.state),
-		zap.Int("new_state", state),
-		zap.Int("accepted_count", len(accepted)),
-	)
+	s.log.Debug().
+		Int("prev_state", s.state).
+		Int("new_state", state).
+		Int("accepted_count", len(accepted)).
+		Msg("Pending updates applied")
 
 	s.setState(state, "pending updates")
 	return nil
@@ -181,9 +186,9 @@ func (s *sequenceBox) SetState(state int, reason string) {
 func (s *sequenceBox) setState(state int, reason string) {
 	old := s.state
 	s.state = state
-	s.log.Debug("State changed",
-		zap.Int("old", old),
-		zap.Int("new", state),
-		zap.String("reason", reason),
-	)
+	s.log.Debug().
+		Int("old", old).
+		Int("new", state).
+		Str("reason", reason).
+		Msg("State changed")
 }

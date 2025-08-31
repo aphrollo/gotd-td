@@ -9,21 +9,21 @@ import (
 )
 
 func (c *Client) ensureRestart(ctx context.Context) error {
-	c.log.Debug("Triggering restart")
+	c.log.Debug().Msg("Triggering restart")
 	c.resetReady()
 
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case c.restart <- struct{}{}:
-		c.log.Debug("Restart initialized")
+		c.log.Debug().Msg("Restart initialized")
 	}
 
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-c.ready.Ready():
-		c.log.Info("Restart ensured")
+		c.log.Info().Msg("Restart ensured")
 		return nil
 	}
 }

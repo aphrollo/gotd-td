@@ -4,9 +4,8 @@ import (
 	"context"
 
 	"github.com/go-faster/errors"
-	"go.uber.org/zap"
-
 	"github.com/gotd/td/clock"
+	"github.com/rs/zerolog"
 )
 
 // LogGroup is simple wrapper around CancellableGroup to log task state.
@@ -14,12 +13,12 @@ import (
 type LogGroup struct {
 	group CancellableGroup
 
-	log   *zap.Logger
+	log   *zerolog.Logger
 	clock clock.Clock
 }
 
 // NewLogGroup creates new LogGroup.
-func NewLogGroup(parent context.Context, log *zap.Logger) *LogGroup {
+func NewLogGroup(parent context.Context, log *zerolog.Logger) *LogGroup {
 	return &LogGroup{
 		group: *NewCancellableGroup(parent),
 		log:   log,
@@ -39,17 +38,24 @@ func (g *LogGroup) SetClock(c clock.Clock) {
 func (g *LogGroup) Go(taskName string, f func(groupCtx context.Context) error) {
 	g.group.Go(func(ctx context.Context) error {
 		start := g.clock.Now()
-		l := g.log.With(zap.String("task", taskName)).WithOptions(zap.AddCallerSkip(1))
-		l.Debug("Task started")
+		l := g.log.With().
+			Str("task", taskName).
+			Logger()
+		l.Debug().Msg("Task started")
 
 		if err := f(ctx); err != nil {
 			elapsed := g.clock.Now().Sub(start)
-			l.Debug("Task stopped", zap.Error(err), zap.Duration("elapsed", elapsed))
+			l.Debug().
+				Err(err).
+				Dur("elapsed", elapsed).
+				Msg("Task stopped")
 			return errors.Wrapf(err, "task %s", taskName)
 		}
 
 		elapsed := g.clock.Now().Sub(start)
-		l.Debug("Task complete", zap.Duration("elapsed", elapsed))
+		l.Debug().
+			Dur("elapsed", elapsed).
+			Msg("Task complete")
 		return nil
 	})
 }

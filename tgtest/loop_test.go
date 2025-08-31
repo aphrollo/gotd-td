@@ -8,9 +8,6 @@ import (
 	"time"
 
 	"github.com/go-faster/errors"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zaptest"
-
 	"github.com/gotd/td/crypto"
 	"github.com/gotd/td/session"
 	"github.com/gotd/td/tdsync"
@@ -19,25 +16,26 @@ import (
 	"github.com/gotd/td/tgtest/cluster"
 	"github.com/gotd/td/tgtest/services"
 	"github.com/gotd/td/tgtest/services/config"
+	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSessionHandle(t *testing.T) {
 	test := func(storage session.Storage, t *testing.T) error {
-		log := zaptest.NewLogger(t)
-		defer func() { _ = log.Sync() }()
+		log := zerolog.New(zerolog.NewTestWriter(t))
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-
+		lg := log.With().Str("logger", "cluster").Logger()
 		g := tdsync.NewCancellableGroup(ctx)
 		c := cluster.NewCluster(cluster.Options{
-			Logger: log.Named("cluster"),
+			Logger: &lg,
 		})
 		d := c.Dispatch(2, "server").Fallback(services.NotImplemented)
 		config.NewService(&tg.Config{}, &tg.CDNConfig{}).Register(d)
 
 		g.Go(c.Up)
-
+		clog := log.With().Str("logger", "client").Logger()
 		g.Go(func(ctx context.Context) error {
 			select {
 			case <-c.Ready():
@@ -52,7 +50,7 @@ func TestSessionHandle(t *testing.T) {
 				DCList:         c.List(),
 				Resolver:       c.Resolver(),
 				NoUpdates:      true,
-				Logger:         log.Named("client"),
+				Logger:         &clog,
 				SessionStorage: storage,
 				RetryInterval:  100 * time.Millisecond,
 			})

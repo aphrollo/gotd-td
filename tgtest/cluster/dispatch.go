@@ -3,8 +3,6 @@ package cluster
 import (
 	"crypto/rsa"
 
-	"go.uber.org/zap"
-
 	"github.com/gotd/td/crypto"
 	"github.com/gotd/td/exchange"
 	"github.com/gotd/td/tgtest"
@@ -40,9 +38,10 @@ func (c *Cluster) DC(id int, name string) (*tgtest.Server, *tgtest.Dispatcher) {
 	}
 
 	d := tgtest.NewDispatcher()
+	lg := c.log.With().Str("logger", name).Int("dc_id", id).Logger()
 	server := tgtest.NewServer(privateKey, tgtest.UnpackInvoke(d), tgtest.ServerOptions{
 		DC:     id,
-		Logger: c.log.Named(name).With(zap.Int("dc_id", id)),
+		Logger: &lg,
 		Codec:  c.getCodec(),
 	})
 	c.setups[id] = setup{

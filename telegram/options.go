@@ -6,9 +6,6 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/zap"
-
 	"github.com/gotd/td/clock"
 	"github.com/gotd/td/crypto"
 	"github.com/gotd/td/exchange"
@@ -16,6 +13,8 @@ import (
 	"github.com/gotd/td/proto"
 	"github.com/gotd/td/telegram/dcs"
 	"github.com/gotd/td/tg"
+	"github.com/rs/zerolog"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type (
@@ -55,8 +54,8 @@ type Options struct {
 
 	// Random is random source. Defaults to crypto.
 	Random io.Reader
-	// Logger is instance of zap.Logger. No logs by default.
-	Logger *zap.Logger
+	// Logger is instance of zerolog.Logger. No logs by default.
+	Logger *zerolog.Logger
 	// SessionStorage will be used to load and save session data.
 	// NB: Very sensitive data, save with care.
 	SessionStorage SessionStorage
@@ -118,7 +117,8 @@ func (opt *Options) setDefaults() {
 		opt.Random = crypto.DefaultRand()
 	}
 	if opt.Logger == nil {
-		opt.Logger = zap.NewNop()
+		nop := zerolog.Nop()
+		opt.Logger = &nop
 	}
 	if opt.DC == 0 {
 		opt.DC = 2

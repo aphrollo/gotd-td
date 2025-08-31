@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zaptest"
 
 	"github.com/gotd/td/telegram/peers"
 	"github.com/gotd/td/tg"
@@ -16,8 +16,9 @@ import (
 
 func testManager(t *testing.T) (*tgmock.Mock, *peers.Manager) {
 	mock := tgmock.New(t)
+	tlg := zerolog.New(zerolog.NewTestWriter(t))
 	return mock, peers.Options{
-		Logger: zaptest.NewLogger(t),
+		Logger: &tlg,
 		Cache:  &peers.InmemoryCache{},
 	}.Build(tg.NewClient(mock))
 }

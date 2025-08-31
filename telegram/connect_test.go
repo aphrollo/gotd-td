@@ -6,11 +6,10 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
 	"github.com/gotd/td/bin"
 	"github.com/gotd/td/exchange"
+	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/require"
 )
 
 type fingerprintNotFoundConn struct{}
@@ -32,11 +31,12 @@ func (m fingerprintNotFoundConn) Ready() <-chan struct{} {
 }
 
 func TestClient_reconnectUntilClosed(t *testing.T) {
+	nop := zerolog.Nop()
 	client := Client{
 		newConnBackoff: func() backoff.BackOff {
 			return backoff.NewConstantBackOff(time.Nanosecond)
 		},
-		log: zap.NewNop(),
+		log: &nop,
 	}
 	client.init()
 	client.conn = fingerprintNotFoundConn{}

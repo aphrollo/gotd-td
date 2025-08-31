@@ -4,11 +4,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
 	"github.com/gotd/td/bin"
 	"github.com/gotd/td/mt"
+	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/require"
 )
 
 func TestConn_handleFutureSalts(t *testing.T) {
@@ -29,7 +28,8 @@ func TestConn_handleFutureSalts(t *testing.T) {
 
 	t.Run("OK", func(t *testing.T) {
 		a := require.New(t)
-		conn := Conn{log: zap.NewNop()}
+		nop := zerolog.Nop()
+		conn := Conn{log: &nop}
 		buf := bin.Buffer{}
 
 		a.NoError(buf.Encode(&mt.FutureSalts{
